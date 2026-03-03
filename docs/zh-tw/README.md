@@ -77,7 +77,7 @@ git clone <repo-url> && cd tmux-tool
 從 GitHub 直接安裝：
 
 ```bash
-curl -fsSL https://jaaaackielai.github.io/tmux-manager/install.sh | bash
+curl -fsSL https://jaaaackielai.github.io/tmux-tool/install.sh | bash
 ```
 
 自訂安裝路徑（預設 `~/.local`）：

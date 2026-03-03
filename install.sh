@@ -10,7 +10,7 @@ set -euo pipefail
 readonly INSTALL_PREFIX="${INSTALL_PREFIX:-${HOME}/.local}"
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 readonly SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-readonly GITHUB_REPO="jaaaackieLai/tmux-tool"
+readonly GITHUB_REPO="jaaaackieLai/tmux-manager"
 readonly GITHUB_RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
 readonly LIB_FILES=(
     actions.sh

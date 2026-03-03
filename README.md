@@ -77,7 +77,7 @@ git clone <repo-url> && cd tmux-tool
 Direct install from GitHub:
 
 ```bash
-curl -fsSL https://jaaaackielai.github.io/tmux-manager/install.sh | bash
+curl -fsSL https://jaaaackielai.github.io/tmux-tool/install.sh | bash
 ```
 
 Custom install prefix (default is `~/.local`):
