@@ -1,6 +1,6 @@
-# tmux-tool
+# tmux-manager
 
-[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-tool/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-manager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)]()
 [![Pure Bash](https://img.shields.io/badge/pure-bash-orange)]()
@@ -70,14 +70,14 @@
 從本地 clone 安裝：
 
 ```bash
-git clone <repo-url> && cd tmux-tool
+git clone <repo-url> && cd tmux-manager
 ./install.sh
 ```
 
 從 GitHub 直接安裝：
 
 ```bash
-curl -fsSL https://jaaaackielai.github.io/tmux-tool/install.sh | bash
+curl -fsSL https://jaaaackielai.github.io/tmux-manager/install.sh | bash
 ```
 
 自訂安裝路徑（預設 `~/.local`）：

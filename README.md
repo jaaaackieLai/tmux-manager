@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-tool/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-manager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)]()
 [![Pure Bash](https://img.shields.io/badge/pure-bash-orange)]()
@@ -70,14 +70,14 @@ It is built in pure Bash, starts quickly, and works even without AI enabled.
 From local clone:
 
 ```bash
-git clone <repo-url> && cd tmux-tool
+git clone <repo-url> && cd tmux-manager
 ./install.sh
 ```
 
 Direct install from GitHub:
 
 ```bash
-curl -fsSL https://jaaaackielai.github.io/tmux-tool/install.sh | bash
+curl -fsSL https://jaaaackielai.github.io/tmux-manager/install.sh | bash
 ```
 
 Custom install prefix (default is `~/.local`):

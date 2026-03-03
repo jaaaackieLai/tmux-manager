@@ -5,7 +5,7 @@
 readonly _CONSTANTS_LOADED=1
 
 readonly VERSION="1.0.0"
-readonly GITHUB_REPO="jaaaackieLai/tmux-tool"
+readonly GITHUB_REPO="jaaaackieLai/tmux-manager"
 readonly GITHUB_RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
 readonly PREVIEW_LINES=15
 readonly PREVIEW_MAX_COLS=80
