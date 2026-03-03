@@ -1,4 +1,4 @@
-# tmux-tool
+# tmux-manager
 
 [![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-tool/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
