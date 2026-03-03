@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# tmux-manager: Interactive tmux session manager with AI summaries
+# Pure bash, zero external dependencies (except tmux, curl, jq for AI features)
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]:-$0}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+if [[ -d "${SCRIPT_DIR}/lib" ]]; then
+    LIB_DIR="${SCRIPT_DIR}/lib"
+elif [[ -d "${SCRIPT_DIR}/tmux-manager-lib" ]]; then
+    # Legacy layout fallback
+    LIB_DIR="${SCRIPT_DIR}/tmux-manager-lib"
+else
+    echo "Error: Cannot find lib directory" >&2
+    exit 1
+fi
+source "${LIB_DIR}/constants.sh"
+source "${LIB_DIR}/update.sh"
+source "${LIB_DIR}/utils.sh"
+source "${LIB_DIR}/config.sh"
+source "${LIB_DIR}/sessions.sh"
+source "${LIB_DIR}/ai.sh"
+source "${LIB_DIR}/render.sh"
+source "${LIB_DIR}/actions.sh"
+source "${LIB_DIR}/input.sh"
+
+# ─── CLI handlers ────────────────────────────────────────────────────
+
+handle_config() {
+    local key="${1:-}" value="${2:-}"
+    if [[ -z "$key" || "$key" == "--list" ]]; then
+        config_list
+    elif [[ -z "$value" ]]; then
+        config_get "$key"
+    else
+        config_set "$key" "$value"
+    fi
+}
+
+# ─── Cleanup and main ────────────────────────────────────────────────
+
+SAVED_TTY=""
+
+cleanup() {
+    cursor_show
+    clear_screen
+    cursor_to 1 1
+    cleanup_ai
+    if [[ -n "$SAVED_TTY" ]]; then
+        stty "$SAVED_TTY" 2>/dev/null || true
+    fi
+}
+
+main() {
+    check_deps
+    load_user_config
+
+    # Handle --version / --help / --uninstall / --config
+    case "${1:-}" in
+        --version|-v) echo "tmux-manager v${VERSION}"; exit 0 ;;
+        --update) do_self_update; exit $? ;;
+        --config) handle_config "${2:-}" "${3:-}"; exit $? ;;
+        --uninstall)
+            echo "Uninstalling tmux-manager..."
+            # SCRIPT_DIR is the real path (resolved symlink), e.g. ~/.local/share/tmux-manager
+            local data_dir="$SCRIPT_DIR"
+            local bin_link=""
+            bin_link="$(command -v tmux-manager 2>/dev/null || true)"
+
+            if [[ -n "$bin_link" && -L "$bin_link" ]]; then
+                rm -f "$bin_link" 2>/dev/null || sudo rm -f "$bin_link"
+                echo "  Removed symlink: ${bin_link}"
+            fi
+            if [[ -d "$data_dir" && "$data_dir" == *"/share/tmux-manager" ]]; then
+                rm -rf "$data_dir" 2>/dev/null || sudo rm -rf "$data_dir"
+                echo "  Removed data:    ${data_dir}/"
+            fi
+            echo "Uninstalled successfully."
+            exit 0
+            ;;
+        --help|-h)
+            echo "tmux-manager v${VERSION} - Interactive tmux session manager"
+            echo ""
+            echo "Usage: tmux-manager"
+            echo "       tmux-manager --update"
+            echo ""
+            echo "Keys (list view):"
+            echo "  Up/Down  Navigate sessions"
+            echo "  Enter    Open session detail view"
+            echo "  n        New session"
+            echo "  f        Refresh session list + AI summaries"
+            echo "  q        Quit"
+            echo ""
+            echo "Keys (detail view):"
+            echo "  Enter/a  Attach to session"
+            echo "  r        Rename session (with AI suggestion)"
+            echo "  k        Kill session"
+            echo "  ESC/q    Back to list"
+            echo ""
+            echo "Environment:"
+            echo "  ANTHROPIC_API_KEY  Set to enable AI summaries (uses Haiku)"
+            echo "  TMUX_MANAGER_CONFIG_FILE   Override config file path"
+            echo "  TMUX_MANAGER_NEW_DEFAULT_DIR  Default workdir for new sessions"
+            echo "  TMUX_MANAGER_NEW_DEFAULT_CMD  Default init command for new sessions"
+            echo "  TMUX_MANAGER_NEW_ASK_DIR   Ask for workdir each time (1/0)"
+            echo "  TMUX_MANAGER_NEW_ASK_CMD   Ask for init command each time (1/0)"
+            echo ""
+            echo "Options:"
+            echo "  --config [--list]          List all settings and values"
+            echo "  --config KEY               Read a config value"
+            echo "  --config KEY VALUE         Set a config value"
+            echo "  --update                   Update tmux-manager from GitHub"
+            echo "  --uninstall                Remove tmux-manager from system"
+            exit 0
+            ;;
+    esac
+
+    # Save terminal state and setup raw mode
+    SAVED_TTY=$(stty -g 2>/dev/null || true)
+    trap cleanup EXIT INT TERM
+    trap 'DIRTY=1' WINCH
+    stty -echo -icanon min 1 time 0 2>/dev/null || true
+
+    cursor_hide
+    clear_screen
+
+    refresh_sessions
+    start_ai_summaries
+    render
+
+    while $RUNNING; do
+        if [[ "$VIEW_MODE" == "detail" ]]; then
+            handle_detail_input
+        else
+            handle_input
+        fi
+        if (( DIRTY )); then
+            render
+            DIRTY=0
+        fi
+    done
+}
+
+main "$@"
