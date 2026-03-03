@@ -119,7 +119,7 @@ while [[ \$# -gt 0 ]]; do
     esac
 done
 [[ -n \"\$out\" ]] || exit 0
-rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-tool/main/}\"
+rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-manager/main/}\"
 cp \"\$REPO_ROOT/\$rel\" \"\$out\"
 EOF
 
@@ -161,7 +161,7 @@ while [[ \$# -gt 0 ]]; do
     esac
 done
 [[ -n \"\$out\" ]] || exit 0
-rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-tool/main/}\"
+rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-manager/main/}\"
 cp \"\$REPO_ROOT/\$rel\" \"\$out\"
 EOF
 
@@ -210,7 +210,7 @@ while [[ \$# -gt 0 ]]; do
     esac
 done
 [[ -n \"\$out\" ]] || exit 0
-rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-tool/main/}\"
+rel=\"\${url#https://raw.githubusercontent.com/jaaaackieLai/tmux-manager/main/}\"
 cp \"\$REPO_ROOT/\$rel\" \"\$out\"
 EOF
 
