@@ -163,7 +163,7 @@ draw_footer() {
         local max_tip_len=$(( TERM_COLS - 2 ))
         local tip1="tmux: C-b d detach              C-b s synchronize input"
         local tip2="      C-b c new window          C-b p/n prev/next window    C-b & close window"
-        local tip3="      C-b % vsplit pane          C-b \" hsplit pane           C-b x close pane"
+        local tip3="      C-b % vsplit pane         C-b \" hsplit pane           C-b x close pane"
 
         buf_cursor_to $(( TERM_ROWS - 4 )) 1
         buf_clear_line
