@@ -181,6 +181,22 @@ spy_capture_pane() {
     [ "$(cat "$SPY_FILE")" -eq "$PREVIEW_LINES" ]
 }
 
+@test "draw_preview header shows window and pane counts from cache" {
+    SESSIONS=("test-session")
+    WIN_COUNTS=("2")
+    PANE_COUNTS=("5")
+    SELECTED=0
+    TERM_COLS=80
+    TERM_ROWS=22
+    _RENDER_BUF=""
+    capture_pane() { echo "line1"; }
+
+    draw_preview 10
+    output=$(buf_flush 2>&1)
+
+    [[ "$output" == *"(test-session) [2w 5p]:"* ]]
+}
+
 @test "draw_preview uses minimum 3 lines when terminal is very short" {
     SESSIONS=("test-session")
     SELECTED=0

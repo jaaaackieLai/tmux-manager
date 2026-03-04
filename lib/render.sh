@@ -116,9 +116,11 @@ draw_preview() {
     fi
 
     local session="${SESSIONS[$SELECTED]}"
+    local win_count="${WIN_COUNTS[$SELECTED]:-?}"
+    local pane_count="${PANE_COUNTS[$SELECTED]:-?}"
     buf_cursor_to "$preview_start" 1
     buf_clear_line
-    buf_printf " ${BOLD}Preview${RESET} ${DIM}(${session}):${RESET}"
+    buf_printf " ${BOLD}Preview${RESET} ${DIM}(${session}) [${win_count}w ${pane_count}p]:${RESET}"
 
     local max_preview_lines=$(( TERM_ROWS - preview_start - 5 ))
     local line_num=0

@@ -46,3 +46,6 @@ TERM_ROWS=0
 TERM_COLS=0
 LIST_END=0
 readonly DETAIL_ACTIONS=("attach" "rename" "kill" "back")
+readonly CAPTURE_PANES_FALLBACK="(unable to capture panes)"
+declare -a WIN_COUNTS=()
+declare -a PANE_COUNTS=()

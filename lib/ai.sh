@@ -23,10 +23,11 @@ start_ai_summaries() {
         local session="${SESSIONS[$i]}"
         (
             local content
-            content=$(capture_pane "$session" "$CAPTURE_LINES" | tail -80)
+            local ai_capture_lines=$(( CAPTURE_LINES < 80 ? CAPTURE_LINES : 80 ))
+            content=$(capture_all_panes "$session" "$ai_capture_lines")
 
             local prompt
-            prompt="Based on this terminal output, provide: 1) A one-line summary in Traditional Chinese (max 30 chars) of what this session is doing. 2) A suggested short name (lowercase, hyphens ok, max 20 chars). Respond in EXACTLY this format, nothing else:
+            prompt="Based on this multi-pane terminal output (each section labeled with window/pane info), provide: 1) A one-line summary in Traditional Chinese (max 30 chars) of what this session is doing. 2) A suggested short name (lowercase, hyphens ok, max 20 chars). Respond in EXACTLY this format, nothing else:
 SUMMARY: <summary>
 NAME: <name>
 
