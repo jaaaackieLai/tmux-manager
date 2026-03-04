@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-1.2.0-green)](https://github.com/jaaaackielai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-1.2.1-green)](https://github.com/jaaaackielai/tmux-manager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)]()
 [![Pure Bash](https://img.shields.io/badge/pure-bash-orange)]()
