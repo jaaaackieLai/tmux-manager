@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/jaaaackielai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-green)](https://github.com/jaaaackielai/tmux-manager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)]()
 [![Pure Bash](https://img.shields.io/badge/pure-bash-orange)]()
@@ -132,6 +132,17 @@ tmux-manager
 | `r` | Rename (with AI suggestion) |
 | `k` | Kill session |
 | `ESC` / `q` | Back to list |
+
+### tmux tip: synchronize input
+
+`C-b s` can toggle synchronized input across all panes in a window.
+Add this line to `~/.tmux.conf`:
+
+```bash
+bind s setw synchronize-panes
+```
+
+Then reload: `tmux source-file ~/.tmux.conf`
 
 ## Configuration
 

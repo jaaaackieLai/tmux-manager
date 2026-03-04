@@ -160,8 +160,8 @@ spy_capture_pane() {
     SELECTED=0
     TERM_COLS=80
     TERM_ROWS=22
-    # preview_start=10, available = 22 - 10 - 5 = 7, which is < PREVIEW_LINES(15)
-    local expected_lines=7
+    # preview_start=10, available = 22 - 10 - 7 = 5, which is < PREVIEW_LINES(15)
+    local expected_lines=5
     spy_capture_pane
 
     draw_preview 10
@@ -201,10 +201,12 @@ spy_capture_pane() {
     SESSIONS=("test-session")
     SELECTED=0
     TERM_COLS=80
-    TERM_ROWS=12
+    TERM_ROWS=16
     spy_capture_pane
 
-    # preview_start=5, available = 12 - 5 - 5 = 2, clamped to 3
+    # preview_start=5, available = 16 - 5 - 7 = 4, but let's test clamp:
+    # Use TERM_ROWS=14: 14 - 5 - 7 = 2, clamped to 3
+    TERM_ROWS=14
     draw_preview 5
 
     [ "$(cat "$SPY_FILE")" -eq 3 ]
@@ -214,10 +216,10 @@ spy_capture_pane() {
     SESSIONS=("test-session")
     SELECTED=0
     TERM_COLS=80
-    TERM_ROWS=13
+    TERM_ROWS=15
     _RENDER_BUF=""
-    # preview_start=8, available = 13 - 8 - 5 = 0 -> no preview content
-    # But row 9 (TERM_ROWS-4) should still be cleared to remove stale content
+    # preview_start=8, available = 15 - 8 - 7 = 0 -> no preview content
+    # But row 9 (TERM_ROWS-6) should still be cleared to remove stale content
     capture_pane() { echo "stale"; }
 
     draw_preview 8
@@ -225,7 +227,7 @@ spy_capture_pane() {
 
     # The preview header row should be rendered (cursor move to row 8)
     [[ "$output" == *$'\033[8;1H'* ]]
-    # Row 9 = TERM_ROWS-4 should be cleared (cursor move to row 9)
+    # Row 9 = TERM_ROWS-6 should be cleared (cursor move to row 9)
     [[ "$output" == *$'\033[9;1H'* ]]
 }
 

@@ -25,8 +25,8 @@ draw_header() {
 
 draw_session_list() {
     local start_row=3
-    # Fixed overhead: header(2) + separator(1) + preview_header(1) + separator(1) + footer(3) = 8
-    local fixed_overhead=8
+    # Fixed overhead: header(2) + separator(1) + preview_header(1) + separator(1) + footer(5) = 10
+    local fixed_overhead=10
     local min_preview=3
     local max_items=$(( TERM_ROWS - fixed_overhead - min_preview ))
     if (( max_items < 3 )); then max_items=3; fi
@@ -108,7 +108,7 @@ draw_preview() {
         buf_clear_line
         buf_printf " ${DIM}No tmux sessions found. Press [n] to create one.${RESET}"
         local r
-        for (( r = preview_start + 1; r <= TERM_ROWS - 4; r++ )); do
+        for (( r = preview_start + 1; r <= TERM_ROWS - 6; r++ )); do
             buf_cursor_to "$r" 1
             buf_clear_line
         done
@@ -122,7 +122,7 @@ draw_preview() {
     buf_clear_line
     buf_printf " ${BOLD}Preview${RESET} ${DIM}(${session}) [${win_count}w ${pane_count}p]:${RESET}"
 
-    local max_preview_lines=$(( TERM_ROWS - preview_start - 5 ))
+    local max_preview_lines=$(( TERM_ROWS - preview_start - 7 ))
     local line_num=0
 
     if (( max_preview_lines >= 1 )); then
@@ -148,24 +148,34 @@ draw_preview() {
 
     # Clear remaining preview lines (also handles residual content after terminal shrink)
     local r
-    for (( r = preview_start + line_num + 1; r <= TERM_ROWS - 4; r++ )); do
+    for (( r = preview_start + line_num + 1; r <= TERM_ROWS - 6; r++ )); do
         buf_cursor_to "$r" 1
         buf_clear_line
     done
 }
 
 draw_footer() {
-    # Separator at R-3
-    draw_separator $(( TERM_ROWS - 3 ))
+    # Separator at R-5
+    draw_separator $(( TERM_ROWS - 5 ))
 
-    # Tmux tips at R-2 (hidden on very small terminals)
-    if (( TERM_ROWS >= 10 )); then
+    # Tmux tips at R-4, R-3, R-2 (hidden on very small terminals)
+    if (( TERM_ROWS >= 12 )); then
+        local max_tip_len=$(( TERM_COLS - 2 ))
+        local tip1="tmux: C-b d detach  C-b s synchronize input"
+        local tip2="      C-b c new window  C-b p/n prev/next window  C-b & close window"
+        local tip3="      C-b % vsplit pane  C-b \" hsplit pane  C-b x close pane"
+
+        buf_cursor_to $(( TERM_ROWS - 4 )) 1
+        buf_clear_line
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip1" "$max_tip_len")"
+
+        buf_cursor_to $(( TERM_ROWS - 3 )) 1
+        buf_clear_line
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip2" "$max_tip_len")"
+
         buf_cursor_to $(( TERM_ROWS - 2 )) 1
         buf_clear_line
-        local tips_text="tmux: C-b d detach  C-b c new  C-b n/p next/prev  C-b % hsplit  C-b \" vsplit"
-        local truncated_tips
-        truncated_tips=$(truncate_text "$tips_text" $(( TERM_COLS - 2 )))
-        buf_printf " ${DIM}%s${RESET}" "$truncated_tips"
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip3" "$max_tip_len")"
     fi
 
     # App keys at R-1
@@ -189,17 +199,27 @@ draw_footer() {
 }
 
 draw_detail_footer() {
-    # Separator at R-3
-    draw_separator $(( TERM_ROWS - 3 ))
+    # Separator at R-5
+    draw_separator $(( TERM_ROWS - 5 ))
 
-    # Tmux tips at R-2 (hidden on very small terminals)
-    if (( TERM_ROWS >= 10 )); then
+    # Tmux tips at R-4, R-3, R-2 (hidden on very small terminals)
+    if (( TERM_ROWS >= 12 )); then
+        local max_tip_len=$(( TERM_COLS - 2 ))
+        local tip1="tmux: C-b d detach  C-b s synchronize input"
+        local tip2="      C-b c new window  C-b p/n prev/next window  C-b & close window"
+        local tip3="      C-b % vsplit pane  C-b \" hsplit pane  C-b x close pane"
+
+        buf_cursor_to $(( TERM_ROWS - 4 )) 1
+        buf_clear_line
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip1" "$max_tip_len")"
+
+        buf_cursor_to $(( TERM_ROWS - 3 )) 1
+        buf_clear_line
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip2" "$max_tip_len")"
+
         buf_cursor_to $(( TERM_ROWS - 2 )) 1
         buf_clear_line
-        local tips_text="tmux: C-b d detach  C-b c new  C-b n/p next/prev  C-b % hsplit  C-b \" vsplit"
-        local truncated_tips
-        truncated_tips=$(truncate_text "$tips_text" $(( TERM_COLS - 2 )))
-        buf_printf " ${DIM}%s${RESET}" "$truncated_tips"
+        buf_printf " ${DIM}%s${RESET}" "$(truncate_text "$tip3" "$max_tip_len")"
     fi
 
     # Detail keys at R-1
@@ -287,7 +307,7 @@ render_detail() {
 
     # Clear remaining lines
     local r
-    for (( r = 6 + ${#DETAIL_ACTIONS[@]}; r <= TERM_ROWS - 4; r++ )); do
+    for (( r = 6 + ${#DETAIL_ACTIONS[@]}; r <= TERM_ROWS - 6; r++ )); do
         buf_cursor_to "$r" 1
         buf_clear_line
     done
