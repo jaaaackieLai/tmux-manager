@@ -19,7 +19,8 @@ with dock_fixture('tmux-manager-dock-orphan-','orph') as f:
     f.detach()
     assert f.bars()==[stale] and f.mouse()=='on','fixture did not leave stale resources'
     f.attach()
-    f.wait(lambda:len(f.clients())==1 and len(f.bars())==1 and f.bars()!=[stale],'stale bar from a dead supervisor was not replaced')
+    # 同一份快照判斷：替換時底部列會經歷 舊列 → 0 → 新列。
+    f.wait(lambda:len(f.clients())==1 and (bars:=f.bars())!=[stale] and len(bars)==1,'stale bar from a dead supervisor was not replaced')
     f.detach()
     f.wait(lambda:not f.bars(),'detach after recovery left bars')
     f.wait(lambda:f.mouse()=='','recovered supervisor did not restore the original mouse setting')
