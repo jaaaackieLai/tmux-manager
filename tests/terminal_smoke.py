@@ -17,9 +17,12 @@ import time
 BINARY = os.path.abspath(sys.argv[1])
 
 class Terminal:
+    # 仍開著的 PTY：等待時要持續讀取，否則子程序寫滿緩衝區（macOS 很小）就會卡住。
+    live = []
     def __init__(self, args, env):
         self.master, self.slave = os.openpty()
-        self.original = termios.tcgetattr(self.slave)
+        # 從 master 讀取終端設定：macOS 在 session leader 結束時會 revoke slave，之後無法再讀。
+        self.original = termios.tcgetattr(self.master)
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack('HHHH',24,80,0,0))
         def setup():
             os.setsid()
@@ -27,7 +30,28 @@ class Terminal:
         self.child = subprocess.Popen(args,stdin=self.slave,stdout=self.slave,stderr=self.slave,env=env,preexec_fn=setup)
         self.output = bytearray()
         self.mark = 0
+        Terminal.live.append(self)
         atexit.register(self.cleanup)
+    @classmethod
+    def pump(cls, duration):
+        """等待 duration 秒，期間持續讀取所有仍開著的 PTY。"""
+        end = time.monotonic()+duration
+        while (remaining := end-time.monotonic()) > 0:
+            masters = {t.master: t for t in cls.live}
+            if not masters:
+                time.sleep(remaining)
+                return
+            ready,_,_ = select.select(list(masters),[],[],min(0.05,remaining))
+            for master in ready:
+                try: masters[master].output.extend(os.read(master,65536))
+                except OSError: pass
+    def wait_exit(self, timeout=5):
+        """等子程序結束，期間持續讀取輸出（關閉 tty 時 macOS 會等輸出排空）。"""
+        deadline = time.monotonic()+timeout
+        while self.child.poll() is None:
+            assert time.monotonic()<deadline,('child did not exit',self.output.decode('utf-8','replace')[-2000:])
+            Terminal.pump(0.05)
+        self.read(0)
     def read(self, duration=0.1):
         end = time.monotonic()+duration
         while time.monotonic()<end:
@@ -39,17 +63,24 @@ class Terminal:
     def cleanup(self):
         if self.child.poll() is None:
             self.child.kill()
-            self.child.wait(timeout=5)
+            self.wait_exit()
     def wait_text(self, text):
         deadline=time.monotonic()+5
         while text.replace(' ', '') not in re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', self.read()[self.mark:]).replace(' ', ''):
             assert self.child.poll() is None, self.output.decode('utf-8','replace')
             assert time.monotonic()<deadline,(text,self.output.decode('utf-8','replace')[-2000:])
         self.mark = len(self.output.decode('utf-8','replace'))
+    def wait_screen(self, text, timeout=5):
+        """等到目前畫面出現 text；不受 wait_text 的比對位置影響（同一次重畫可能已包含它）。"""
+        deadline=time.monotonic()+timeout
+        while text not in '\n'.join(self.screen()):
+            assert self.child.poll() is None, self.output.decode('utf-8','replace')
+            assert time.monotonic()<deadline,(text,self.screen())
+            self.read(0.05)
     def send(self, data):
         os.write(self.master,data)
     def screen(self):
-        size=os.get_terminal_size(self.slave)
+        size=os.get_terminal_size(self.master)
         return screen_snapshot(bytes(self.output),size.columns,size.lines)
     def click_text(self, label):
         import unicodedata
@@ -63,12 +94,13 @@ class Terminal:
         raise AssertionError((label,self.screen()))
     def finish(self, data=b'\x1b'):
         self.send(data)
-        self.child.wait(timeout=5)
+        self.wait_exit()
         self.read()
         assert self.child.returncode==0,self.output.decode('utf-8','replace')
-        assert termios.tcgetattr(self.slave)==self.original,'raw/echo/icanon flags not restored'
+        assert termios.tcgetattr(self.master)==self.original,'raw/echo/icanon flags not restored'
         for sequence in [b'\x1b[?1049l',b'\x1b[?25h',b'\x1b[?2004l']:
             assert sequence in self.output,('missing terminal restore',sequence)
+        Terminal.live.remove(self)
         os.close(self.master);os.close(self.slave)
 
 def main():
@@ -80,7 +112,7 @@ def main():
         t.wait_text('Prompt Slots');t.send(b'n');t.wait_text('Ctrl-S')
         t.send('中文🙂 標題'.encode()+b'\t' + b'test' +b'\t')
         t.send(b'\x1b[200~'+'第一行\r\n第二行🙂\n'.encode()+b'\x1b[201~')
-        time.sleep(0.1);t.send(b'\x13');t.wait_text('已儲存')
+        Terminal.pump(0.1);t.send(b'\x13');t.wait_text('已儲存')
         t.finish()
         with open(os.path.join(root,'prompts.toml'),encoding='utf-8') as file:
             content=file.read();assert '中文🙂 標題' in content and '第二行🙂' in content,content
@@ -105,8 +137,8 @@ def main():
                 assert time.monotonic()<deadline,'workspace did not print preview fixture'
                 time.sleep(0.02)
             t=Terminal([BINARY,'--socket',socket],env);t.wait_text('smoke')
-            t.wait_text('WORKSPACE-PREVIEW-MARKER');t.read(0.1)
-            assert 'WORKSPACE-PREVIEW-MARKER' in '\n'.join(t.screen()),'real workspace output was not rendered in Preview'
+            # 列表與 Preview 可能在同一次重畫出現，直接檢查目前畫面。
+            t.wait_screen('WORKSPACE-PREVIEW-MARKER')
             t.read(0.4);before=len(t.output)
             t.send(b'\x1b[<35;5;4M'*20+b'\x1b[<0;5;4m\x1b[<32;5;4M\x1b[<2;5;4M\x1b[<0;5;3M')
             t.read(0.5)
@@ -133,8 +165,8 @@ def main():
             assert not subprocess.check_output(['tmux','-S',socket,'list-clients','-F','#{session_name}']).strip(),'first Enter attached instead of showing menu'
             command = "printf '%s\\n' " + ' '.join(f'modal-{index:02}' for index in range(14)) + ' MODAL-PREVIEW-UPDATE'
             subprocess.run(['tmux','-S',socket,'send-keys','-t','smoke',command,'Enter'],check=True)
-            t.wait_text('MODAL-PREVIEW-UPDATE');t.read(0.2)
-            assert 'MODAL-PREVIEW-UPDATE' in '\n'.join(t.screen()),'open menu stopped rendering latest Preview'
+            # ratatui 只重畫有變動的格子，新文字可能被拆成數段輸出；直接檢查目前畫面。
+            t.wait_screen('MODAL-PREVIEW-UPDATE');t.read(0.2)
             assert 'attach' in '\n'.join(t.screen()),'background refresh closed the menu'
             t.send(b'\x1b[<0;5;2M\x1b[<0;5;2m');t.wait_text('[Enter] 操作');t.read(0.2)
             assert 'Prompt Slots' in '\n'.join(t.screen()) and '未指定' not in '\n'.join(t.screen()),'outside header click opened prompts instead of only dismissing'

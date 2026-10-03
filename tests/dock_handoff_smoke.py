@@ -23,7 +23,8 @@ with dock_fixture('tmux-manager-dock-handoff-','again',wrapper=WRAPPER) as f:
     f.wait(lambda:os.path.exists(f.path('killing')),'old supervisor never started cleanup')
     f.attach()
     f.wait(lambda:len(f.clients())==1,'reattach failed')
-    f.wait(lambda:len(f.bars())==1 and f.bars()[0]!=first,'reattach during the old cleanup ended with no bottom bar')
+    # 同一份快照判斷：交接時底部列會經歷 舊列 → 0 → 新列。
+    f.wait(lambda:(bars:=f.bars())!=[first] and len(bars)==1,'reattach during the old cleanup ended with no bottom bar')
     f.detach()
     f.wait(lambda:not f.bars(),'detach after handoff left bars')
     client.finish(b'q')
