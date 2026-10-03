@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-inside-') as root:
         end=time.monotonic()+5
         while tmux('list-panes','-t',first,'-F','#{@tmux_manager_dock}').strip():
             assert time.monotonic()<end,'inside session left a bar after detach';Terminal.pump(.05)
-        assert termios.tcgetattr(client.slave)==client.original
+        assert termios.tcgetattr(client.master)==client.original
     finally:
         subprocess.run(['tmux','-S',socket,'kill-server'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 print('PASS: inside tmux switch-client/manager exit/dock persists/path with spaces/byte exact/focus return/detach cleanup')

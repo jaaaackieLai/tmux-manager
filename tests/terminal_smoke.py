@@ -21,7 +21,8 @@ class Terminal:
     live = []
     def __init__(self, args, env):
         self.master, self.slave = os.openpty()
-        self.original = termios.tcgetattr(self.slave)
+        # 從 master 讀取終端設定：macOS 在 session leader 結束時會 revoke slave，之後無法再讀。
+        self.original = termios.tcgetattr(self.master)
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack('HHHH',24,80,0,0))
         def setup():
             os.setsid()
@@ -72,7 +73,7 @@ class Terminal:
     def send(self, data):
         os.write(self.master,data)
     def screen(self):
-        size=os.get_terminal_size(self.slave)
+        size=os.get_terminal_size(self.master)
         return screen_snapshot(bytes(self.output),size.columns,size.lines)
     def click_text(self, label):
         import unicodedata
@@ -89,7 +90,7 @@ class Terminal:
         self.wait_exit()
         self.read()
         assert self.child.returncode==0,self.output.decode('utf-8','replace')
-        assert termios.tcgetattr(self.slave)==self.original,'raw/echo/icanon flags not restored'
+        assert termios.tcgetattr(self.master)==self.original,'raw/echo/icanon flags not restored'
         for sequence in [b'\x1b[?1049l',b'\x1b[?25h',b'\x1b[?2004l']:
             assert sequence in self.output,('missing terminal restore',sequence)
         Terminal.live.remove(self)

@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
     def wait(predicate,message):
         end=time.monotonic()+5
         while not predicate():
-            assert time.monotonic()<end,message
+            assert time.monotonic()<end,message() if callable(message) else message
             Terminal.pump(.04)
     def data(name):
         path=os.path.join(root,name)
@@ -57,15 +57,19 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
         tmux('select-pane','-t',bar);client.send(b'\r')
         wait(lambda:tmux('display-message','-p','-t',second,'#{pane_active}').strip()=='1','bar keyboard interaction did not return focus')
         Terminal.pump(.1);assert data('second')==expected,'Enter in the bar triggered a prompt'
-        client.send(b'\x1b[A');wait(lambda:data('second').endswith(b'\x1b[A'),'direction key was taken from the work pane')
+        # tmux 依 pane 的游標鍵模式送出 CSI 或 SS3 形式的「上」。
+        client.send(b'\x1b[A')
+        wait(lambda:any(key in data('second')[len(expected):] for key in (b'\x1b[A',b'\x1bOA')),
+             lambda:f"direction key was taken from the work pane: {data('second')[len(expected):]!r}")
+        up=data('second')[len(expected):]
         click('多行')
         if tmux('display-message','-p','-t',second,'#{bracket_paste_flag}').strip()=='1':
             extra=b'\x1b[200~first\n'+'中文🙂\n'.encode()+b'\x1b[201~'
-            wait(lambda:len(data('second'))>=len(expected)+3+len(extra),'multiline prompt did not arrive')
-            assert data('second')==expected+b'\x1b[A'+extra
+            wait(lambda:len(data('second'))>=len(expected)+len(up)+len(extra),'multiline prompt did not arrive')
+            assert data('second')==expected+up+extra
         else:
             wait(lambda:'尚未貼上' in tmux('capture-pane','-p','-t',bar),'multiline capability failure is invisible')
-            assert data('second')==expected+b'\x1b[A'
+            assert data('second')==expected+up
         third=tmux('new-window','-d','-t','fixture','-P','-F','#{pane_id}','python3',helper,os.path.join(root,'third')).strip()
         wait(lambda:len(bars())==2,'new window did not get a prompt dock')
         otherbar=next(p[0] for p in bars() if p[0]!=bar)
