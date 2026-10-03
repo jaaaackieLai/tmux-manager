@@ -17,6 +17,8 @@ import time
 BINARY = os.path.abspath(sys.argv[1])
 
 class Terminal:
+    # 仍開著的 PTY：等待時要持續讀取，否則子程序寫滿緩衝區（macOS 很小）就會卡住。
+    live = []
     def __init__(self, args, env):
         self.master, self.slave = os.openpty()
         self.original = termios.tcgetattr(self.slave)
@@ -27,7 +29,28 @@ class Terminal:
         self.child = subprocess.Popen(args,stdin=self.slave,stdout=self.slave,stderr=self.slave,env=env,preexec_fn=setup)
         self.output = bytearray()
         self.mark = 0
+        Terminal.live.append(self)
         atexit.register(self.cleanup)
+    @classmethod
+    def pump(cls, duration):
+        """等待 duration 秒，期間持續讀取所有仍開著的 PTY。"""
+        end = time.monotonic()+duration
+        while (remaining := end-time.monotonic()) > 0:
+            masters = {t.master: t for t in cls.live}
+            if not masters:
+                time.sleep(remaining)
+                return
+            ready,_,_ = select.select(list(masters),[],[],min(0.05,remaining))
+            for master in ready:
+                try: masters[master].output.extend(os.read(master,65536))
+                except OSError: pass
+    def wait_exit(self, timeout=5):
+        """等子程序結束，期間持續讀取輸出（關閉 tty 時 macOS 會等輸出排空）。"""
+        deadline = time.monotonic()+timeout
+        while self.child.poll() is None:
+            assert time.monotonic()<deadline,('child did not exit',self.output.decode('utf-8','replace')[-2000:])
+            Terminal.pump(0.05)
+        self.read(0)
     def read(self, duration=0.1):
         end = time.monotonic()+duration
         while time.monotonic()<end:
@@ -39,7 +62,7 @@ class Terminal:
     def cleanup(self):
         if self.child.poll() is None:
             self.child.kill()
-            self.child.wait(timeout=5)
+            self.wait_exit()
     def wait_text(self, text):
         deadline=time.monotonic()+5
         while text.replace(' ', '') not in re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', self.read()[self.mark:]).replace(' ', ''):
@@ -63,12 +86,13 @@ class Terminal:
         raise AssertionError((label,self.screen()))
     def finish(self, data=b'\x1b'):
         self.send(data)
-        self.child.wait(timeout=5)
+        self.wait_exit()
         self.read()
         assert self.child.returncode==0,self.output.decode('utf-8','replace')
         assert termios.tcgetattr(self.slave)==self.original,'raw/echo/icanon flags not restored'
         for sequence in [b'\x1b[?1049l',b'\x1b[?25h',b'\x1b[?2004l']:
             assert sequence in self.output,('missing terminal restore',sequence)
+        Terminal.live.remove(self)
         os.close(self.master);os.close(self.slave)
 
 def main():
@@ -80,7 +104,7 @@ def main():
         t.wait_text('Prompt Slots');t.send(b'n');t.wait_text('Ctrl-S')
         t.send('中文🙂 標題'.encode()+b'\t' + b'test' +b'\t')
         t.send(b'\x1b[200~'+'第一行\r\n第二行🙂\n'.encode()+b'\x1b[201~')
-        time.sleep(0.1);t.send(b'\x13');t.wait_text('已儲存')
+        Terminal.pump(0.1);t.send(b'\x13');t.wait_text('已儲存')
         t.finish()
         with open(os.path.join(root,'prompts.toml'),encoding='utf-8') as file:
             content=file.read();assert '中文🙂 標題' in content and '第二行🙂' in content,content

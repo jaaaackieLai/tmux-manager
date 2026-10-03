@@ -35,8 +35,7 @@ class DockFixture:
     def wait(self,predicate,message,timeout=30):
         end=time.monotonic()+timeout
         while not predicate():
-            if self.client and self.client.child.poll() is None:self.client.read(.05)
-            else:time.sleep(.05)
+            Terminal.pump(.05)
             assert time.monotonic()<end,message
     def supervisor(self):
         processes=subprocess.check_output(['ps','-axo','pid,ppid,args'],text=True)

@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-popup-') as root:
             assert os.path.getsize(os.path.join(root,'first'))==0
             client.send(b'\x1b')
         assert os.path.getsize(os.path.join(root,'second'))==0,'paste leaked to another pane'
-        client.read(1.1);tmux('detach-client','-s','fixture');client.child.wait(timeout=5)
+        client.read(1.1);tmux('detach-client','-s','fixture');client.wait_exit()
         assert client.child.returncode==0
     finally:
         subprocess.run(['tmux','-S',socket,'kill-server'],check=False)

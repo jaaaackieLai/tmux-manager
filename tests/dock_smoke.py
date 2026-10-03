@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
         end=time.monotonic()+5
         while not predicate():
             assert time.monotonic()<end,message
-            time.sleep(.04)
+            Terminal.pump(.04)
     def data(name):
         path=os.path.join(root,name)
         return open(path,'rb').read() if os.path.exists(path) else b''
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
         assert data('second')==expected
         tmux('select-pane','-t',bar);client.send(b'\r')
         wait(lambda:tmux('display-message','-p','-t',second,'#{pane_active}').strip()=='1','bar keyboard interaction did not return focus')
-        time.sleep(.1);assert data('second')==expected,'Enter in the bar triggered a prompt'
+        Terminal.pump(.1);assert data('second')==expected,'Enter in the bar triggered a prompt'
         client.send(b'\x1b[A');wait(lambda:data('second').endswith(b'\x1b[A'),'direction key was taken from the work pane')
         click('多行')
         if tmux('display-message','-p','-t',second,'#{bracket_paste_flag}').strip()=='1':
@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
         wait(lambda:len(tmux('list-clients','-t','fixture','-F','#{client_name}').splitlines())==2,'second attach failed')
         assert len(bars())==2,'second attach duplicated prompt bars'
         tmux('detach-client','-t',os.ttyname(second_client.slave));second_client.wait_text('Sessions')
-        time.sleep(.6);assert len(bars())==2,'detaching another client removed bars still in use'
+        Terminal.pump(.6);assert len(bars())==2,'detaching another client removed bars still in use'
         second_client.finish(b'q')
         tmux('detach-client','-t',os.ttyname(client.slave));client.wait_text('Sessions')
         wait(lambda:len(bars())==0,'detach left owned dock panes running')

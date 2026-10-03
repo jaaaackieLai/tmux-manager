@@ -329,3 +329,8 @@ fn real_prompt_dock_reattach_during_old_cleanup_still_gets_bars() {
 fn real_prompt_dock_closes_a_window_whose_last_work_pane_exited() {
     run_dock_pty("dock_last_pane_smoke.py", &[]);
 }
+#[test]
+#[ignore = "需要 python3 與 PTY；CI 必須另行執行 --ignored"]
+fn pty_fixture_drains_output_while_waiting_for_exit() {
+    run_dock_pty("pty_drain_smoke.py", &[]);
+}

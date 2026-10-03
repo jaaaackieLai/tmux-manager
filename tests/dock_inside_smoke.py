@@ -31,10 +31,10 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-inside-') as root:
             client.read(.05);assert time.monotonic()<end,'inside dock did not fill the work pane'
         assert open(os.path.join(root,'received'),'rb').read()==expected
         assert tmux('display-message','-p','-t',first,'#{pane_active}').strip()=='1'
-        tmux('detach-client','-s','inside');client.child.wait(timeout=5)
+        tmux('detach-client','-s','inside');client.wait_exit()
         end=time.monotonic()+5
         while tmux('list-panes','-t',first,'-F','#{@tmux_manager_dock}').strip():
-            assert time.monotonic()<end,'inside session left a bar after detach';time.sleep(.05)
+            assert time.monotonic()<end,'inside session left a bar after detach';Terminal.pump(.05)
         assert termios.tcgetattr(client.slave)==client.original
     finally:
         subprocess.run(['tmux','-S',socket,'kill-server'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
