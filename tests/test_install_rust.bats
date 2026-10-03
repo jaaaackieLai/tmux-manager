@@ -29,7 +29,7 @@ make_v1_install() {
     make_v1_install
     touch "${TEST_PREFIX}/bin/other-tool"
 
-    run timeout -s KILL 10 env INSTALL_PREFIX="$TEST_PREFIX" bash "$REPO_ROOT/install.sh" --uninstall </dev/null
+    run with_timeout 10 env INSTALL_PREFIX="$TEST_PREFIX" bash "$REPO_ROOT/install.sh" --uninstall </dev/null
 
     [ "$status" -eq 0 ]
     [ ! -e "${TEST_PREFIX}/bin/tmux-manager" ]
@@ -44,7 +44,7 @@ make_v1_install() {
     mkdir -p "$config_dir"
     touch "${config_dir}/config.sh" "${config_dir}/prompts.toml" "${config_dir}/notes.md"
 
-    run timeout -s KILL 10 env INSTALL_PREFIX="$TEST_PREFIX" XDG_CONFIG_HOME="${TEST_WORK}/xdg" \
+    run with_timeout 10 env INSTALL_PREFIX="$TEST_PREFIX" XDG_CONFIG_HOME="${TEST_WORK}/xdg" \
         bash "$REPO_ROOT/install.sh" --uninstall --purge </dev/null
 
     [ "$status" -eq 0 ]
