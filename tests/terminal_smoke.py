@@ -70,6 +70,13 @@ class Terminal:
             assert self.child.poll() is None, self.output.decode('utf-8','replace')
             assert time.monotonic()<deadline,(text,self.output.decode('utf-8','replace')[-2000:])
         self.mark = len(self.output.decode('utf-8','replace'))
+    def wait_screen(self, text, timeout=5):
+        """等到目前畫面出現 text；不受 wait_text 的比對位置影響（同一次重畫可能已包含它）。"""
+        deadline=time.monotonic()+timeout
+        while text not in '\n'.join(self.screen()):
+            assert self.child.poll() is None, self.output.decode('utf-8','replace')
+            assert time.monotonic()<deadline,(text,self.screen())
+            self.read(0.05)
     def send(self, data):
         os.write(self.master,data)
     def screen(self):
@@ -130,8 +137,8 @@ def main():
                 assert time.monotonic()<deadline,'workspace did not print preview fixture'
                 time.sleep(0.02)
             t=Terminal([BINARY,'--socket',socket],env);t.wait_text('smoke')
-            t.wait_text('WORKSPACE-PREVIEW-MARKER');t.read(0.1)
-            assert 'WORKSPACE-PREVIEW-MARKER' in '\n'.join(t.screen()),'real workspace output was not rendered in Preview'
+            # 列表與 Preview 可能在同一次重畫出現，直接檢查目前畫面。
+            t.wait_screen('WORKSPACE-PREVIEW-MARKER')
             t.read(0.4);before=len(t.output)
             t.send(b'\x1b[<35;5;4M'*20+b'\x1b[<0;5;4m\x1b[<32;5;4M\x1b[<2;5;4M\x1b[<0;5;3M')
             t.read(0.5)

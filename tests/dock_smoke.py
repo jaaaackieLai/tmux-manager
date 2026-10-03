@@ -40,7 +40,16 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
             row=next(i for i,s in enumerate(lines) if title in s)
             prefix=lines[row].split(title)[0]
             x=sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ['W','F'] else 1 for c in prefix)
+            # 與前一次點擊間隔超過 tmux 的雙擊判定（約 300ms）；否則 tmux 稍後執行的
+            # DoubleClick1Pane 綁定會再 select-pane 到底部列，搶走剛交回的焦點。
+            Terminal.pump(.5)
             client.send(f'\x1b[<0;{left+x+1};{top+row+1}M\x1b[<0;{left+x+1};{top+row+1}m'.encode())
+        def state():
+            panes=tmux('list-panes','-t',first,'-F','#{pane_id} active=#{pane_active} last=#{pane_last} mode=#{pane_in_mode} dock=#{@tmux_manager_dock}')
+            return panes+'bar:\n'+tmux('capture-pane','-p','-t',bar)
+        def refocused(pane):
+            # 底部列處理點擊或按鍵的最後一步是把焦點交回工作 pane，此時 bar 成為上一個 active pane。
+            return tmux('display-message','-p','-t',pane,'#{pane_active}').strip()=='1' and tmux('display-message','-p','-t',bar,'#{pane_last}').strip()=='1'
         assert tmux('display-message','-p','-t',bar,'#{pane_width}').strip()=='80','dock is not full window width'
         assert tmux('display-message','-p','-t',second,'#{pane_active}').strip()=='1','creating dock changed active work pane'
         tmux('set-window-option','-t',first,'synchronize-panes','on')
@@ -49,18 +58,19 @@ with tempfile.TemporaryDirectory(prefix='tmux-manager-dock-') as root:
         wait(lambda:len(data('first'))>=len(expected),'mouse click did not paste to last active work pane')
         assert data('first')==expected,'payload changed, repeated, or Enter was added'
         assert data('second')==b'','paste went to another pane'
-        wait(lambda:tmux('display-message','-p','-t',first,'#{pane_active}').strip()=='1','focus did not return to work pane')
+        wait(lambda:refocused(first),lambda:'focus did not return to work pane\n'+state())
         tmux('set-window-option','-t',first,'synchronize-panes','off')
         tmux('select-pane','-t',second);click('單行')
         wait(lambda:len(data('second'))>=len(expected),'dock did not follow changed active work pane')
         assert data('second')==expected
+        wait(lambda:refocused(second),lambda:'focus did not return after the second click\n'+state())
         tmux('select-pane','-t',bar);client.send(b'\r')
-        wait(lambda:tmux('display-message','-p','-t',second,'#{pane_active}').strip()=='1','bar keyboard interaction did not return focus')
+        wait(lambda:refocused(second),lambda:'bar keyboard interaction did not return focus\n'+state())
         Terminal.pump(.1);assert data('second')==expected,'Enter in the bar triggered a prompt'
         # tmux 依 pane 的游標鍵模式送出 CSI 或 SS3 形式的「上」。
         client.send(b'\x1b[A')
         wait(lambda:any(key in data('second')[len(expected):] for key in (b'\x1b[A',b'\x1bOA')),
-             lambda:f"direction key was taken from the work pane: {data('second')[len(expected):]!r}")
+             lambda:f"direction key was taken from the work pane: {data('second')[len(expected):]!r}\n"+state())
         up=data('second')[len(expected):]
         click('多行')
         if tmux('display-message','-p','-t',second,'#{bracket_paste_flag}').strip()=='1':
