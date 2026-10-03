@@ -1,0 +1,29 @@
+[package]
+name = "tmux-manager"
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.88"
+description = "tmux session manager and persistent prompt slots"
+license = "MIT"
+repository = "https://github.com/jaaaackieLai/tmux-manager"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures-util = { version = "0.3", default-features = false }
+ratatui = "0.29"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+uuid = { version = "1", features = ["v4", "serde"] }
+fs2 = "0.4"
+tempfile = "3"
+sha2 = "0.10"
+thiserror = "2"
+semver = "1"
+unicode-width = "0.2"
+unicode-segmentation = "1"
+
+[dev-dependencies]

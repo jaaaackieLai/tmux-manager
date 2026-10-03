@@ -1,0 +1,88 @@
+name: 發布 v2 release
+# 推送 v* tag 時建置各平台 binary 並建立 GitHub Release。
+# 舊版（Bash v1.x）`--update` 會改跑 install.sh 下載 latest release，因此合併前必須先發布。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: 安裝 musl 工具鏈（Linux）
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: 建置
+        shell: bash
+        run: |
+          # ring 含 C 程式碼；明確指定 musl-gcc，避免 cc crate 找不到 <arch>-linux-musl-gcc。
+          if [[ "${{ matrix.target }}" == *-linux-musl ]]; then
+            export "CC_$(tr - _ <<< "${{ matrix.target }}")=musl-gcc"
+          fi
+          cargo build --release --locked --target ${{ matrix.target }}
+      - name: 確認 binary 可執行（Linux 須為靜態連結，不依賴 glibc 版本）
+        shell: bash
+        run: |
+          binary=target/${{ matrix.target }}/release/tmux-manager
+          "$binary" --version
+          if [[ "$RUNNER_OS" == Linux ]] && ldd "$binary" 2>&1 | grep -q 'libc.so'; then
+            echo "Linux binary 動態連結 glibc" >&2
+            exit 1
+          fi
+      - name: 產生 binary 與 SHA-256
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/tmux-manager artifacts/tmux-manager-${{ matrix.target }}
+          cd artifacts
+          if command -v sha256sum >/dev/null; then
+            sha256sum tmux-manager-${{ matrix.target }} > tmux-manager-${{ matrix.target }}.sha256
+          else
+            shasum -a 256 tmux-manager-${{ matrix.target }} > tmux-manager-${{ matrix.target }}.sha256
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tmux-manager-${{ matrix.target }}
+          path: artifacts/*
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: tag 必須與 Cargo 版本一致
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          if [[ "$GITHUB_REF_NAME" != "v${version}" ]]; then
+            echo "tag ${GITHUB_REF_NAME} 與 Cargo 版本 ${version} 不符" >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 建立 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "$GITHUB_REF_NAME" --generate-notes

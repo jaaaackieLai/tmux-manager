@@ -56,6 +56,7 @@ CRLF 在匯入／輸入時正規化為 LF；拒絕 ESC、NUL、裸 CR 及其他�
 
 ## 互動流程
 
+管理器列表：按 `p` 或單擊上方 `[p] Prompt Slots` → prompt 管理模式（無 target）→ 新增／編輯／儲存 → Esc／q 返回原 manager，保留 session 選取；沒有 session 時也能使用。
 管理器內：session detail 按 `p` → 選擇 window/pane → prompt 選單 → 點選 slot → 貼到先前選定的 pane。
 AI CLI 使用中：tmux prefix + 大寫 P → popup prompt 選單 → 點選 slot → popup 關閉 → 原 AI CLI 顯示貼上內容。
 popup 左側顯示 slot 清單，右側預覽內容，底部顯示目標 session/window/pane。窄畫面改為上下布局。
@@ -99,3 +100,9 @@ Rust installer 支援 INSTALL_PREFIX，安裝到 prefix/bin；舊 symlink 必須
 - [tmux 官方手冊](https://man.openbsd.org/tmux.1)：popup、穩定 pane ID、buffer 與 bracketed paste。
 - [tmux format 實作](https://github.com/tmux/tmux/blob/master/format.c)：新版本 private-mode 查詢；須在支援基線驗證可用性。
 - [tmux paste-buffer 實作](https://github.com/tmux/tmux/blob/master/cmd-paste-buffer.c)：貼上行為；不同支援版本仍需整合測試。
+
+## 2026-10-03 實作能力紀錄
+
+Linux tmux 3.4 沒有 mode 2004 查詢欄位，多行採具名 buffer 並顯示尚未貼上；Linux 官方 tmux 3.7c 實測 `bracket_paste_flag` 可判定開關，多行直貼 byte-for-byte 通過。`pane_private_modes` 為較新版本查詢備援，未以不存在欄位宣稱基線支援。macOS、WSL、SSH 與實際 AI CLI 人工確認見 [驗證紀錄](../validation/2026-10-03-rust-prompt-slots.md)。
+
+`display-popup` 的直接 argv 不會展開 `#{pane_id}`。binding 改以 `run-shell -C` 先在原 target 展開 tmux 指令，再直接 exec binary；socket 使用 tmux 的 `q:` quoting，prompt 內容全程只走 stdin/buffer，不拼入 shell。

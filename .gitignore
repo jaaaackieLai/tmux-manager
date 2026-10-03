@@ -1,2 +1,5 @@
 .claude/
 CLAUDE.md
+/target/
+/.superpowers/
+__pycache__/
