@@ -165,8 +165,8 @@ def main():
             assert not subprocess.check_output(['tmux','-S',socket,'list-clients','-F','#{session_name}']).strip(),'first Enter attached instead of showing menu'
             command = "printf '%s\\n' " + ' '.join(f'modal-{index:02}' for index in range(14)) + ' MODAL-PREVIEW-UPDATE'
             subprocess.run(['tmux','-S',socket,'send-keys','-t','smoke',command,'Enter'],check=True)
-            t.wait_text('MODAL-PREVIEW-UPDATE');t.read(0.2)
-            assert 'MODAL-PREVIEW-UPDATE' in '\n'.join(t.screen()),'open menu stopped rendering latest Preview'
+            # ratatui 只重畫有變動的格子，新文字可能被拆成數段輸出；直接檢查目前畫面。
+            t.wait_screen('MODAL-PREVIEW-UPDATE');t.read(0.2)
             assert 'attach' in '\n'.join(t.screen()),'background refresh closed the menu'
             t.send(b'\x1b[<0;5;2M\x1b[<0;5;2m');t.wait_text('[Enter] 操作');t.read(0.2)
             assert 'Prompt Slots' in '\n'.join(t.screen()) and '未指定' not in '\n'.join(t.screen()),'outside header click opened prompts instead of only dismissing'
