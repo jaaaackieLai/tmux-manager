@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-2.0.1-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
 
 Rust 實作的 tmux 工作階段管理器，提供 AI 摘要與可編輯、持久儲存的 Prompt Slots。Bash 版（v1.x）執行 `tmux-manager --update` 即改裝為 Rust 版，舊版檔案會一併清除，設定自動轉換。
 
@@ -121,7 +121,7 @@ AI 使用 `ANTHROPIC_API_KEY`，未設定也能完整使用管理器與 prompts�
 cargo install --path . --locked
 ```
 
-Rust installer 安裝到 prefix/bin，原子切換，不寫入舊 symlink 的 target。manifest 在 prefix/share/tmux-manager；備份在 prefix/bin/tmux-manager.backup-*，只保留最新一份。從 Bash 版（v1.x）升級時，切換成功後移除舊版 share/tmux-manager 的主程式與 lib/*.sh，不留備份（只刪已知檔名）。卸載移除 binary、備份、manifest 與舊版檔案，預設保留設定與 prompts；加 `--purge` 一併刪除。`cargo install` 沒有本工具 manifest，請使用 Cargo 管理卸載；要使用內建更新，先執行 Rust `install`。
+Rust installer 安裝到 prefix/bin，原子切換，不寫入舊 symlink 的 target。manifest 在 prefix/share/tmux-manager。切換期間暫存舊 binary，失敗時回復，成功後即刪除，不留備份；舊版本留下的 prefix/bin/tmux-manager.backup-* 會在下次安裝時清除。從 Bash 版（v1.x）升級時，切換成功後移除舊版 share/tmux-manager 的主程式與 lib/*.sh（只刪已知檔名）。卸載移除 binary、manifest 與舊版檔案，預設保留設定與 prompts；加 `--purge` 一併刪除。`cargo install` 沒有本工具 manifest，請使用 Cargo 管理卸載；要使用內建更新，先執行 Rust `install`。
 
 ```bash
 tmux-manager --update      # 需已發布對應平台 artifact 與 SHA-256

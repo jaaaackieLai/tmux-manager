@@ -64,9 +64,6 @@ pub async fn run(cli: Cli) -> Result<()> {
             &prefix.clone().unwrap_or_else(|| default_prefix(&env)),
         )?;
         println!("已安裝：{}", report.binary.display());
-        if let Some(backup) = report.backup {
-            println!("舊版備份：{}", backup.display());
-        }
         return Ok(());
     }
     let path = Config::resolve_path(&cli.overrides, &env);

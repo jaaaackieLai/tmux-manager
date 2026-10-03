@@ -18,7 +18,6 @@ pub struct InstallManifest {
 pub struct InstallReport {
     pub binary: PathBuf,
     pub manifest: PathBuf,
-    pub backup: Option<PathBuf>,
 }
 /// Bash 版（v1.x）安裝的函式庫檔名。
 const LEGACY_LIBS: [&str; 9] = [
@@ -115,9 +114,6 @@ pub(crate) fn install_version(
     }
     let binary = prefix.join("bin/tmux-manager");
     fs::create_dir_all(binary.parent().unwrap())?;
-    let legacy_script = fs::canonicalize(share_dir(&prefix).join("tmux-manager")).ok();
-    let replaces_legacy =
-        legacy_script.is_some() && fs::canonicalize(&binary).ok() == legacy_script;
     let backup = match fs::symlink_metadata(&binary) {
         Ok(metadata) => {
             let path =
@@ -143,8 +139,8 @@ pub(crate) fn install_version(
         binary: binary.clone(),
         version: version.strip_prefix('v').unwrap_or(version).into(),
         checksum: storage::sha256_hex(data),
-        // Bash 版不留備份：切換成功後連同舊檔一起清除。
-        backup: backup.clone().filter(|_| !replaces_legacy),
+        // 不留備份；欄位保留給舊 manifest，讓之前留下的備份仍能清除。
+        backup: None,
     };
     let encoded = toml::to_string_pretty(&manifest)?;
     storage::atomic_write_mode(&binary, data, true, 0o755)?;
@@ -158,21 +154,13 @@ pub(crate) fn install_version(
         }
         return Err(e);
     }
-    if replaces_legacy {
-        if let Some(backup) = &backup {
-            storage::remove_if_exists(backup)?;
-        }
-    }
-    // 只保留最新一份備份。
-    if let Some(previous) = current.and_then(|m| m.backup) {
-        if Some(&previous) != manifest.backup.as_ref() {
-            storage::remove_if_exists(&previous)?;
-        }
+    // 備份只用於上面切換失敗時回復；成功後連同舊版留下的備份一起清除。
+    for path in backup.iter().chain(current.and_then(|m| m.backup).iter()) {
+        storage::remove_if_exists(path)?;
     }
     remove_legacy(&manifest.prefix)?;
     Ok(InstallReport {
         binary,
         manifest: manifest_file,
-        backup: manifest.backup,
     })
 }

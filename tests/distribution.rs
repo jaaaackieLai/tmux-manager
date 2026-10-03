@@ -22,7 +22,7 @@ fn install_twice_and_uninstall_preserve_user_files_and_config() {
 }
 #[test]
 #[cfg(unix)]
-fn legacy_symlink_is_backed_up_without_overwriting_target() {
+fn legacy_symlink_is_replaced_without_overwriting_target_or_leaving_backup() {
     use std::os::unix::fs::symlink;
     let dir = tempfile::tempdir().unwrap();
     let prefix = dir.path().join("prefix");
@@ -40,12 +40,12 @@ fn legacy_symlink_is_backed_up_without_overwriting_target() {
             .file_type()
             .is_symlink()
     );
-    assert!(
-        std::fs::symlink_metadata(report.backup.unwrap())
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
+    let leftovers: Vec<_> = std::fs::read_dir(prefix.join("bin"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .filter(|name| name != "tmux-manager")
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
 }
 #[test]
 fn checksum_failure_cannot_replace_installed_binary_and_uninstall_refuses_modified_file() {
@@ -123,7 +123,7 @@ fn release_server(
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let name = artifact_name(std::env::consts::OS, std::env::consts::ARCH).unwrap();
-    let release = serde_json::json!({"tag_name":"v2.1.0","assets":[{"name":name,"browser_download_url":format!("{base}/binary")},{"name":format!("{name}.sha256"),"browser_download_url":format!("{base}/checksum")}]});
+    let release = serde_json::json!({"tag_name":"v999.0.0","assets":[{"name":name,"browser_download_url":format!("{base}/binary")},{"name":format!("{name}.sha256"),"browser_download_url":format!("{base}/checksum")}]});
     let responses = [
         release.to_string(),
         format!("{checksum}  {name}\n"),
@@ -176,7 +176,7 @@ async fn update_installs_verified_artifact_and_records_remote_version() {
     thread.join().unwrap();
     assert!(result.updated);
     assert_eq!(std::fs::read(&report.binary).unwrap(), b"abc");
-    assert_eq!(read_manifest(dir.path()).unwrap().version, "2.1.0");
+    assert_eq!(read_manifest(dir.path()).unwrap().version, "999.0.0");
 }
 #[tokio::test]
 async fn interrupted_or_bad_checksum_download_keeps_existing_install() {
