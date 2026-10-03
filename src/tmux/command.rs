@@ -27,6 +27,11 @@ impl Runner for ProcessRunner {
     fn run(&self, request: CommandRequest) -> BoxFuture<'_, Result<CommandOutput>> {
         Box::pin(async move {
             let mut command = Command::new("tmux");
+            // 輸出交給本工具解析：非 UTF-8 locale 下 tmux 會把 tab 與中文換成 `_`。
+            // attach 畫面由使用者終端機顯示，維持 tmux 依 locale 判斷。
+            if !request.interactive {
+                command.arg("-u");
+            }
             if let Some(socket) = &request.socket {
                 command.arg("-S").arg(socket);
             }

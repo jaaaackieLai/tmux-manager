@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-2.1.0-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-2.1.1-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
 
 Rust 實作的 tmux 工作階段管理器，提供 AI 摘要與可編輯、持久儲存的 Prompt Slots。Bash 版（v1.x）執行 `tmux-manager --update` 即改裝為 Rust 版，舊版檔案會一併清除，設定自動轉換。
 
