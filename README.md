@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-2.0.0-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-2.0.1-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
 
 Rust 實作的 tmux 工作階段管理器，提供 AI 摘要與可編輯、持久儲存的 Prompt Slots。Bash 版（v1.x）執行 `tmux-manager --update` 即改裝為 Rust 版，舊版檔案會一併清除，設定自動轉換。
 
@@ -43,8 +43,6 @@ cargo build --release --locked
 
 底部列會跟著 session 的各個 window 顯示，包含之後新增的 window；保存 prompt 變更會自動更新。底部保留四行，視窗太小時安全退化。透過 manager attach 時會暫時啟用該 session 的 mouse，不需改 tmux.conf；最後一個 client detach 後移除本工具的底部列並恢復原 mouse 設定。多行若顯示「多行尚未貼上」，內容僅存為畫面所示的具名 buffer，能力限制見下方「多行能力」。
 
-[底部列畫面預覽（測試資料）](docs/superpowers/validation/assets/prompt-dock-wide.png) · [底部列驗證與審查](docs/superpowers/validation/2026-10-03-prompt-dock.md)
-
 在 prompt 管理模式按 `n` 新增，Tab 切換標題、標籤與多行內容，Ctrl-S 儲存。`e` 編輯、`d` 刪除確認、`J/K` 調整順序、`/` 搜尋。編輯時 Esc 先返回 prompt 列表，未儲存內容需確認放棄；Ctrl-R 可重新載入外部資料並保留草稿，有 revision conflict 時不會覆寫其他視窗的修改。
 
 管理器列表的 ↑↓/Tab 選 session、Enter 開浮動操作選單、`n` 新增後 attach、`f` 更新摘要、`q` 離開。選單保留背景列表與 Preview，選項間留一行空白，底部按鍵提示為單行；小高度使用緊湊排列，窄視窗縮短提示。↑↓/Tab 選 attach／rename／kill／back，Enter 執行；`a/r/k` 分別 attach／改名／結束 session，`p` 先選 window/pane 再開 prompt 選單。Esc／q／點選單外關閉，保留 session 選取與面板比例；Preview 與摘要在選單開啟時仍更新。
@@ -85,7 +83,7 @@ set -g mouse on
 | 3.7c | 指定 pane 直貼 | `bracket_paste_flag=1` 才直貼 | Linux 3.7c 通過 |
 | 有 `pane_private_modes` 的版本 | 指定 pane 直貼 | 偵測 mode 2004，作為查詢備援 | 尚未實測 |
 
-多行包含尾端 LF；能力未知或關閉時顯示「尚未貼上」，不合併換行、不假裝完成。`paste-buffer -p -r` 在測試 PTY 保留中文、emoji、換行與尾端 LF；開啟 synchronize-panes 時沒有廣播至其他 pane。tmux 成功不等同所有前景 CLI 都不會送出，實際 AI CLI 驗收狀態見 [驗證紀錄](docs/superpowers/validation/2026-10-03-rust-prompt-slots.md)。
+多行包含尾端 LF；能力未知或關閉時顯示「尚未貼上」，不合併換行、不假裝完成。`paste-buffer -p -r` 在測試 PTY 保留中文、emoji、換行與尾端 LF；開啟 synchronize-panes 時沒有廣播至其他 pane。tmux 成功不等同所有前景 CLI 都不會送出。
 
 ## 設定與舊版遷移
 
@@ -148,5 +146,3 @@ cargo test --locked --test tmux_pty -- --ignored --nocapture
 ```
 
 真實 PTY 測試需要 tmux、python3 以及建立 socket/PTY 權限，CI 另列必跑步驟。Rust 固定 1.88.0 與 Cargo.lock。binding 使用 `run-shell -C` 在 popup 前展開原 pane/socket，再以 direct argv 啟動 binary。Bash 版（v1.x）程式碼已移除，需要時可從 `v1.2.1` tag 取得。`lib/constants.sh` 只保留 `VERSION`，必須與 Cargo 版本同步，讓舊版 `--update` 偵測到新版並改裝 Rust binary。
-
-[繁體中文文件](docs/zh-tw/README.md) · [設計](docs/superpowers/specs/2026-10-02-rust-prompt-slots-design.md) · [計畫](docs/superpowers/plans/2026-10-02-rust-prompt-slots.md)
