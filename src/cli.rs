@@ -67,7 +67,7 @@ pub enum Commands {
     },
     /// 更新已由 Rust installer 管理的 binary
     Update,
-    /// 依 manifest 移除 binary、備份與舊 Bash 版檔案；預設保留 config/prompts
+    /// 依 manifest 移除 binary、舊版備份與舊 Bash 版檔案；預設保留 config/prompts
     Uninstall {
         #[arg(long)]
         prefix: Option<PathBuf>,

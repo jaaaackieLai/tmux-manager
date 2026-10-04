@@ -43,8 +43,7 @@ fn upgrading_bash_install_removes_legacy_files_without_backup() {
     .unwrap();
     let source = dir.path().join("binary");
     std::fs::write(&source, b"rust binary").unwrap();
-    let report = install(&source, &prefix).unwrap();
-    assert!(report.backup.is_none());
+    install(&source, &prefix).unwrap();
     assert_eq!(tmux_manager_entries(&prefix.join("bin")), ["tmux-manager"]);
     let share = prefix.join("share/tmux-manager");
     assert!(!share.join("tmux-manager").exists());
@@ -57,7 +56,7 @@ fn upgrading_bash_install_removes_legacy_files_without_backup() {
     );
 }
 #[test]
-fn repeated_installs_keep_only_latest_backup() {
+fn repeated_installs_leave_no_backup() {
     let dir = tempfile::tempdir().unwrap();
     let prefix = dir.path().join("prefix");
     let source = dir.path().join("binary");
@@ -65,13 +64,34 @@ fn repeated_installs_keep_only_latest_backup() {
         std::fs::write(&source, content).unwrap();
         install(&source, &prefix).unwrap();
     }
-    let backups: Vec<_> = tmux_manager_entries(&prefix.join("bin"))
-        .into_iter()
-        .filter(|name| name.starts_with("tmux-manager.backup-"))
-        .collect();
-    assert_eq!(backups.len(), 1);
-    let latest = read_manifest(&prefix).unwrap().backup.unwrap();
-    assert_eq!(std::fs::read(latest).unwrap(), b"v2");
+    assert_eq!(tmux_manager_entries(&prefix.join("bin")), ["tmux-manager"]);
+    assert!(read_manifest(&prefix).unwrap().backup.is_none());
+}
+#[test]
+fn install_removes_backup_left_by_older_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let prefix = dir.path().join("prefix");
+    let source = dir.path().join("binary");
+    std::fs::write(&source, "v1").unwrap();
+    install(&source, &prefix).unwrap();
+    let manifest = read_manifest(&prefix).unwrap();
+    let old_backup = manifest.binary.with_file_name("tmux-manager.backup-old");
+    std::fs::write(&old_backup, "v0").unwrap();
+    let manifest_file = prefix.join("share/tmux-manager/install-manifest.toml");
+    let mut text = std::fs::read_to_string(&manifest_file).unwrap();
+    text.push_str(&format!(
+        "backup = {:?}\n",
+        old_backup.display().to_string()
+    ));
+    std::fs::write(&manifest_file, text).unwrap();
+    assert_eq!(
+        read_manifest(&prefix).unwrap().backup,
+        Some(old_backup.clone())
+    );
+    std::fs::write(&source, "v2").unwrap();
+    install(&source, &prefix).unwrap();
+    assert!(!old_backup.exists());
+    assert_eq!(tmux_manager_entries(&prefix.join("bin")), ["tmux-manager"]);
 }
 #[test]
 #[cfg(unix)]

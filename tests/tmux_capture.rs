@@ -234,3 +234,43 @@ async fn real_tmux_ai_worker_sends_workspace_capture_and_returns_summary() {
     assert_eq!(summary.name, "capture-ok");
     server.join().unwrap();
 }
+
+/// tmux 依 client 的 LC_ALL/LC_CTYPE/LANG 判斷是否 UTF-8；非 UTF-8 時會把 tab 與非 ASCII 字元換成 `_`。
+/// 測試不能安全地修改自身環境變數，因此移除 locale 後重新執行本測試，在子 process 內驗證。
+#[tokio::test]
+#[ignore = "需要真實 tmux 與隔離 socket 權限"]
+async fn real_tmux_sessions_parse_without_utf8_locale() {
+    const CHILD: &str = "TMUX_MANAGER_LOCALE_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "real_tmux_sessions_parse_without_utf8_locale",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env_remove("LC_ALL")
+            .env_remove("LC_CTYPE")
+            .env_remove("LANG")
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success(), "非 UTF-8 locale 下解析 session 失敗");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("socket");
+    let client = TmuxClient::new(Some(socket.clone()));
+    client
+        .checked(&["-f", "/dev/null", "new-session", "-d", "-s", "中文-locale"])
+        .await
+        .unwrap();
+    let sessions = client.list_sessions().await;
+    let _ = std::process::Command::new("tmux")
+        .arg("-S")
+        .arg(&socket)
+        .arg("kill-server")
+        .output();
+    let names: Vec<_> = sessions.unwrap().into_iter().map(|s| s.name).collect();
+    assert_eq!(names, ["中文-locale"]);
+}
