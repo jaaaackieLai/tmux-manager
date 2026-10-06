@@ -2,8 +2,16 @@ use std::time::Duration;
 use tmux_manager::{
     ai::{AiClient, AiService},
     app::event::AppEvent,
-    tmux::{SessionId, TmuxClient},
+    tmux::{PaneId, PaneLayout, PanePreview, SessionId, TmuxClient},
 };
+
+/// Workspace 第一個 pane 印出的內容。
+const WORKSPACE_TEXT: &str =
+    "WORKSPACE-CAPTURE-MARKER\n\\001tmux-manager-section\\001\nWORKSPACE-AFTER-MARKER";
+
+fn texts(preview: &[PanePreview]) -> Vec<&str> {
+    preview.iter().map(|p| p.text.as_str()).collect()
+}
 
 struct Workspace {
     _dir: tempfile::TempDir,
@@ -84,6 +92,54 @@ impl Workspace {
         }
         panic!("workspace did not print fixture output");
     }
+
+    /// 在 active pane 右側切出新 pane 並等它印出 marker。
+    async fn split_right(&self, marker: &str) -> PaneId {
+        let command = format!("printf '{marker}\\n'; sleep 60");
+        let pane = self
+            .client
+            .checked(&[
+                "split-window",
+                "-d",
+                "-h",
+                "-t",
+                self.session.as_str(),
+                "-P",
+                "-F",
+                "#{pane_id}",
+                &command,
+            ])
+            .await
+            .unwrap();
+        let pane = PaneId::parse(pane.trim()).unwrap();
+        for _ in 0..100 {
+            if self
+                .client
+                .checked(&["capture-pane", "-p", "-t", pane.as_str()])
+                .await
+                .unwrap()
+                .contains(marker)
+            {
+                return pane;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("pane did not print {marker}");
+    }
+
+    async fn layouts(&self, cache: &[PaneLayout]) -> Vec<PaneLayout> {
+        let snapshot = self
+            .client
+            .snapshot(Some((&self.session, cache)))
+            .await
+            .unwrap();
+        snapshot
+            .preview
+            .unwrap()
+            .into_iter()
+            .map(|p| p.layout)
+            .collect()
+    }
 }
 
 impl Drop for Workspace {
@@ -100,45 +156,15 @@ impl Drop for Workspace {
 #[ignore = "需要真實 tmux 與隔離 socket 權限"]
 async fn real_tmux_batch_preview_and_capture_preserve_workspace_output() {
     let workspace = Workspace::new().await;
-    let (sessions, preview) = workspace
+    let cache = workspace.layouts(&[]).await;
+    let snapshot = workspace
         .client
-        .snapshot(Some(&workspace.session))
+        .snapshot(Some((&workspace.session, &cache)))
         .await
         .unwrap();
-    assert_eq!(sessions.len(), 1);
-    let expected =
-        "WORKSPACE-CAPTURE-MARKER\n\\001tmux-manager-section\\001\nWORKSPACE-AFTER-MARKER";
-    assert_eq!(preview.as_deref(), Some(expected));
-    let second = workspace
-        .client
-        .checked(&[
-            "split-window",
-            "-d",
-            "-h",
-            "-t",
-            workspace.session.as_str(),
-            "-P",
-            "-F",
-            "#{pane_id}",
-            "printf 'SECOND-WORKSPACE-MARKER\\n'; sleep 60",
-        ])
-        .await
-        .unwrap();
-    let mut ready = false;
-    for _ in 0..100 {
-        if workspace
-            .client
-            .checked(&["capture-pane", "-p", "-t", second.trim()])
-            .await
-            .unwrap()
-            .contains("SECOND-WORKSPACE-MARKER")
-        {
-            ready = true;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert!(ready, "second pane did not print fixture output");
+    assert_eq!(snapshot.sessions.len(), 1);
+    assert_eq!(texts(&snapshot.preview.unwrap()), [WORKSPACE_TEXT]);
+    workspace.split_right("SECOND-WORKSPACE-MARKER").await;
     let panes = workspace
         .client
         .list_panes(&workspace.session)
@@ -148,8 +174,70 @@ async fn real_tmux_batch_preview_and_capture_preserve_workspace_output() {
     assert_eq!(ids.len(), 2, "only the two work panes should be captured");
     assert_eq!(
         workspace.client.capture_many(&ids, 80).await.unwrap(),
-        [expected, "SECOND-WORKSPACE-MARKER"]
+        [WORKSPACE_TEXT, "SECOND-WORKSPACE-MARKER"]
     );
+}
+
+#[tokio::test]
+#[ignore = "需要真實 tmux 與隔離 socket 權限"]
+async fn real_tmux_snapshot_previews_every_pane_of_the_current_window() {
+    let workspace = Workspace::new().await;
+    workspace.split_right("RIGHT-PANE-MARKER").await;
+    let first = workspace
+        .client
+        .snapshot(Some((&workspace.session, &[])))
+        .await
+        .unwrap();
+    assert_eq!(first.sessions.len(), 1);
+    let first = first.preview.unwrap();
+    assert_eq!(first.len(), 2, "dock pane should be excluded: {first:?}");
+    assert!(first[0].layout.left < first[1].layout.left);
+    assert_eq!(first[0].layout.top, first[1].layout.top);
+    assert_eq!(texts(&first), ["", ""]);
+    let cache: Vec<_> = first.into_iter().map(|p| p.layout).collect();
+    let second = workspace
+        .client
+        .snapshot(Some((&workspace.session, &cache)))
+        .await
+        .unwrap()
+        .preview
+        .unwrap();
+    assert_eq!(texts(&second), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
+}
+
+#[tokio::test]
+#[ignore = "需要真實 tmux 與隔離 socket 權限"]
+async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
+    let workspace = Workspace::new().await;
+    let closed = workspace.split_right("CLOSED-PANE-MARKER").await;
+    let mut cache = workspace.layouts(&[]).await;
+    workspace
+        .client
+        .checked(&["kill-pane", "-t", closed.as_str()])
+        .await
+        .unwrap();
+    workspace.split_right("RIGHT-PANE-MARKER").await;
+    // 已關閉的 pane 夾在中間：tmux 會在它的 capture 失敗後中止後續指令。
+    cache.extend(workspace.layouts(&[]).await.into_iter().skip(1));
+    assert_eq!(cache.len(), 3);
+    assert_eq!(cache[1].id, closed);
+    let stale = workspace
+        .client
+        .snapshot(Some((&workspace.session, &cache)))
+        .await
+        .unwrap();
+    assert_eq!(stale.sessions.len(), 1);
+    let stale = stale.preview.unwrap();
+    assert_eq!(texts(&stale), [WORKSPACE_TEXT, ""]);
+    let cache: Vec<_> = stale.into_iter().map(|p| p.layout).collect();
+    let fresh = workspace
+        .client
+        .snapshot(Some((&workspace.session, &cache)))
+        .await
+        .unwrap()
+        .preview
+        .unwrap();
+    assert_eq!(texts(&fresh), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
 }
 
 #[tokio::test]
