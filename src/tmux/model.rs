@@ -51,3 +51,20 @@ pub struct PaneCapabilities {
     pub in_mode: bool,
     pub synchronized: bool,
 }
+/// pane 在 window 內的位置與大小，單位為 tmux cell。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaneLayout {
+    pub id: PaneId,
+    pub index: u32,
+    pub left: u16,
+    pub top: u16,
+    pub width: u16,
+    pub height: u16,
+    pub active: bool,
+    pub command: String,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PanePreview {
+    pub layout: PaneLayout,
+    pub text: String,
+}
