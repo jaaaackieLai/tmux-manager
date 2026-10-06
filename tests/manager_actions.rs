@@ -6,6 +6,12 @@ use tmux_manager::{
     ui::manager_mouse::ManagerHitMap,
 };
 
+mod support;
+
+fn preview_marker() -> tmux_manager::tmux::PanePreview {
+    support::preview::pane(0, 0, 80, true, "zsh", "PREVIEW-MARKER")
+}
+
 fn app() -> AppState {
     let mut app = AppState::default();
     app.replace_sessions(
@@ -18,7 +24,7 @@ fn app() -> AppState {
             })
             .collect(),
     );
-    app.preview = "PREVIEW-MARKER".into();
+    app.preview = vec![preview_marker()];
     app
 }
 
@@ -171,7 +177,7 @@ fn outside_click_only_dismisses_menu() {
         assert_eq!(app.selected_id(), selected.as_ref());
         assert_eq!(app.split_percent, Some(40));
         assert!(!app.dragging_split);
-        assert_eq!(app.preview, "PREVIEW-MARKER");
+        assert_eq!(app.preview, [preview_marker()]);
     }
 }
 

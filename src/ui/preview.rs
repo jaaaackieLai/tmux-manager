@@ -1,6 +1,6 @@
 use crate::{
     app::AppState,
-    tmux::{PanePreview, session::PREVIEW_LINES},
+    tmux::PanePreview,
     ui::{preview_layout, text::clip},
 };
 use ratatui::{
@@ -15,20 +15,12 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &AppState) {
-    let preview_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
-        .title(format!(
-            " Preview · {} · 最後 {PREVIEW_LINES} 行 ",
-            app.sessions
-                .get(app.selected)
-                .map(|s| s.name.as_str())
-                .unwrap_or("—")
-        ));
-    let visible = usize::from(preview_block.inner(area).height);
-    let lines: Vec<_> = app.preview.lines().collect();
-    let preview = lines[lines.len().saturating_sub(visible)..].join("\n");
-    frame.render_widget(Paragraph::new(preview).block(preview_block), area);
+    let name = app
+        .sessions
+        .get(app.selected)
+        .map(|s| s.name.as_str())
+        .unwrap_or("—");
+    render_panes(frame, area, &format!(" Preview · {name} "), &app.preview);
 }
 
 /// 依 tmux 版面縮放顯示 window 內所有 pane，pane 之間以共用分隔線切開。
@@ -71,9 +63,13 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: &PanePreview, hidden: usize)
     while lines.last().is_some_and(|l| l.trim().is_empty()) {
         lines.pop();
     }
-    let visible = usize::from(area.height.saturating_sub(1));
+    // 只剩一列時最新輸出比標題重要。
+    let titled = area.height >= preview_layout::MIN_HEIGHT;
+    let visible = usize::from(area.height - u16::from(titled));
     let tail = &lines[lines.len().saturating_sub(visible)..];
-    let text: Vec<Line> = std::iter::once(Line::styled(title, style))
+    let text: Vec<Line> = titled
+        .then(|| Line::styled(title, style))
+        .into_iter()
         .chain(tail.iter().map(|l| Line::raw(clip(l, width))))
         .collect();
     frame.render_widget(Paragraph::new(text), area);

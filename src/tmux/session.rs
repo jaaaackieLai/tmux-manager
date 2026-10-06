@@ -60,11 +60,14 @@ fn parse_panes(text: &str) -> Result<Vec<PanePreview>> {
     }
     Ok(panes)
 }
-/// 依 pane id 填入擷取文字，行數取 cache 中的高度；已關閉的 pane 直接略過。
+/// 依 pane id 填入擷取文字，行數取 cache 中的高度；本輪沒擷取到的 pane 沿用上一輪文字。
 fn fill_captures(panes: &mut [PanePreview], cache: &[PanePreview], captured: &[String]) {
-    for (cached, text) in cache.iter().zip(captured) {
+    for (n, cached) in cache.iter().enumerate() {
         if let Some(pane) = panes.iter_mut().find(|p| p.layout.id == cached.layout.id) {
-            pane.text = tail(text, usize::from(cached.layout.height));
+            pane.text = match captured.get(n) {
+                Some(text) => tail(text, usize::from(cached.layout.height)),
+                None => cached.text.clone(),
+            };
         }
     }
 }
@@ -141,7 +144,7 @@ impl TmuxClient {
             return Err(error("tmux 擷取分段數量不符"));
         }
         // tmux 遇到失敗的指令即中止後續指令：list-panes 之後的 sentinel 有印出才代表它成功；
-        // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，text 保持空白。
+        // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，沿用上一輪文字。
         let failed = output.status != 0;
         let preview = match parts.get(1) {
             Some(text) if !failed || parts.len() > 2 => {

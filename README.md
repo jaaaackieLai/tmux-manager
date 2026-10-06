@@ -1,6 +1,6 @@
 # tmux-manager
 
-[![Version](https://img.shields.io/badge/version-2.1.2-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
+[![Version](https://img.shields.io/badge/version-2.2.0-green)](https://github.com/jaaaackieLai/tmux-manager/releases)
 
 互動式 tmux session 管理工具，適合同時跑多個 Claude Code 等 AI CLI session。列出所有 session 與即時預覽，可用 AI 摘要每個 session 正在做什麼，並提供可儲存、一鍵貼上的 Prompt Slots。
 

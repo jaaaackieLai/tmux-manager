@@ -1,7 +1,7 @@
 use crate::ui::manager_mouse::{ManagerHit, ManagerHitMap};
 use crate::{
     ai::AiSummary,
-    tmux::{Session, SessionId},
+    tmux::{PanePreview, Session, SessionId},
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Position;
@@ -38,7 +38,8 @@ pub struct AppState {
     pub screen: Screen,
     pub ai: HashMap<SessionId, std::result::Result<AiSummary, String>>,
     pub generation: u64,
-    pub preview: String,
+    /// 選中 session 當前 window 的 pane；同時是下一輪擷取的 cache。
+    pub preview: Vec<PanePreview>,
     pub status: String,
     pub split_percent: Option<u16>,
     pub dragging_split: bool,

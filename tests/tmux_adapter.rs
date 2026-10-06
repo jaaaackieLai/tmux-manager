@@ -392,6 +392,35 @@ async fn snapshot_keeps_panes_when_a_closed_cached_pane_aborts_the_captures() {
     assert_eq!(snapshot.preview.unwrap(), expected);
 }
 #[tokio::test]
+async fn snapshot_keeps_cached_text_for_panes_whose_capture_did_not_run() {
+    let left = layout("%1", 0, 0, 40, 24, true);
+    let right = layout("%2", 1, 41, 39, 24, false);
+    let previous = |layout: &PaneLayout, text: &str| PanePreview {
+        layout: layout.clone(),
+        text: text.into(),
+    };
+    let cache = [
+        previous(&left, "OLD LEFT"),
+        previous(&layout("%9", 1, 41, 39, 24, false), "GONE"),
+        previous(&right, "OLD RIGHT"),
+    ];
+    // 擷取到空白就是空白；%9 失敗後 %2 沒有擷取，沿用上一輪文字避免閃爍。
+    let out = format!(
+        "$2\twork\t1\t5\n{SENT}\n{}{}{SENT}\n\n{SENT}\n",
+        pane_line(&left, false, ""),
+        pane_line(&right, false, ""),
+    );
+    let runner = Arc::new(FakeRunner::new(vec![(1, &out, "can't find pane: %9")]));
+    let id = SessionId::parse("$2").unwrap();
+    let preview = TmuxClient::with_runner(None, runner)
+        .snapshot(Some((&id, &cache)))
+        .await
+        .unwrap()
+        .preview
+        .unwrap();
+    assert_eq!(preview, [blank(left), previous(&right, "OLD RIGHT")]);
+}
+#[tokio::test]
 async fn snapshot_rejects_extra_sections_instead_of_misattributing_pane_output() {
     let left = layout("%1", 0, 0, 40, 24, true);
     let right = layout("%2", 1, 41, 39, 24, false);

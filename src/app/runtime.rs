@@ -7,17 +7,14 @@ use crate::{
     ai::{AiClient, AiService},
     config::Config,
     prompts::{PromptStore, paste::PasteTarget, runtime as prompts},
-    tmux::{PanePreview, SessionId, TmuxClient},
+    tmux::{SessionId, TmuxClient},
     ui::{
         form, manager,
         terminal::{self, Input, TerminalGuard},
     },
 };
 use crossterm::event::{Event, KeyEventKind, MouseEventKind};
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::time::Duration;
 use tokio::sync::mpsc;
 pub async fn run(
     tmux: TmuxClient,
@@ -51,7 +48,6 @@ pub async fn run(
     let mut io_busy = false;
     let mut dirty = true;
     let mut hits = crate::ui::manager_mouse::ManagerHitMap::default();
-    let pane_cache = Arc::new(Mutex::new(Vec::<PanePreview>::new()));
     loop {
         if dirty {
             terminal.draw(|f| {
@@ -64,7 +60,7 @@ pub async fn run(
             Some(message) = receiver.recv() => match message {
                 AppEvent::Refresh { sessions,preview } => {
                     io_busy = false; dirty |= app.replace_sessions(sessions); dirty |= app.refresh_succeeded();
-                    if let Some((id,text)) = preview { if app.selected_id() == Some(&id) && app.preview != text { app.preview = text; dirty = true; } }
+                    if let Some((id,panes)) = preview { if app.selected_id() == Some(&id) && app.preview != panes { app.preview = panes; dirty = true; } }
                 },
                 AppEvent::AiResult { session_id,generation,result } => dirty |= app.apply_ai(session_id,generation,result),
                 AppEvent::Error(message) => { io_busy = false; dirty |= app.show_refresh_error(message); },
@@ -74,17 +70,10 @@ pub async fn run(
                 // 操作選單只覆蓋部分列表；背景 Preview 仍持續更新。
                 let selected = app.selected_id().cloned();
                 let client = tmux.clone();
-                let cache = pane_cache.clone();
+                // 上一輪的 pane 清單決定本輪擷取哪些 pane；換選取時已清空。
+                let cache = app.preview.clone();
                 event::spawn_event(sender.clone(), async move {
-                    // 暫時：上一輪的 pane 清單作為本輪擷取依據，Preview 只顯示 active pane。
-                    let panes = cache.lock().unwrap().clone();
-                    let result = client.snapshot(selected.as_ref().map(|id| (id,panes.as_slice()))).await.map(|snapshot| {
-                        let text = snapshot.preview.and_then(|panes| {
-                            *cache.lock().unwrap() = panes.clone();
-                            panes.into_iter().find(|p| p.layout.active).map(|p| p.text)
-                        });
-                        AppEvent::Refresh { sessions: snapshot.sessions,preview: selected.zip(text) }
-                    });
+                    let result = client.snapshot(selected.as_ref().map(|id| (id,cache.as_slice()))).await.map(|snapshot| AppEvent::Refresh { sessions: snapshot.sessions,preview: selected.zip(snapshot.preview) });
                     result.unwrap_or_else(|e| AppEvent::Error(e.to_string()))
                 });
             },
