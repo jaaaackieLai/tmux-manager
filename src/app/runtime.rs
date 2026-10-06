@@ -7,14 +7,17 @@ use crate::{
     ai::{AiClient, AiService},
     config::Config,
     prompts::{PromptStore, paste::PasteTarget, runtime as prompts},
-    tmux::{SessionId, TmuxClient},
+    tmux::{PaneLayout, SessionId, TmuxClient},
     ui::{
         form, manager,
         terminal::{self, Input, TerminalGuard},
     },
 };
 use crossterm::event::{Event, KeyEventKind, MouseEventKind};
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::sync::mpsc;
 pub async fn run(
     tmux: TmuxClient,
@@ -48,6 +51,7 @@ pub async fn run(
     let mut io_busy = false;
     let mut dirty = true;
     let mut hits = crate::ui::manager_mouse::ManagerHitMap::default();
+    let pane_cache = Arc::new(Mutex::new(Vec::<PaneLayout>::new()));
     loop {
         if dirty {
             terminal.draw(|f| {
@@ -70,8 +74,17 @@ pub async fn run(
                 // 操作選單只覆蓋部分列表；背景 Preview 仍持續更新。
                 let selected = app.selected_id().cloned();
                 let client = tmux.clone();
+                let cache = pane_cache.clone();
                 event::spawn_event(sender.clone(), async move {
-                    let result = client.snapshot(selected.as_ref()).await.map(|(sessions,text)| AppEvent::Refresh { sessions,preview: selected.zip(text) });
+                    // 暫時：上一輪的 pane 清單作為本輪擷取依據，Preview 只顯示 active pane。
+                    let panes = cache.lock().unwrap().clone();
+                    let result = client.snapshot(selected.as_ref().map(|id| (id,panes.as_slice()))).await.map(|snapshot| {
+                        let text = snapshot.preview.and_then(|panes| {
+                            *cache.lock().unwrap() = panes.iter().map(|p| p.layout.clone()).collect();
+                            panes.into_iter().find(|p| p.layout.active).map(|p| p.text)
+                        });
+                        AppEvent::Refresh { sessions: snapshot.sessions,preview: selected.zip(text) }
+                    });
                     result.unwrap_or_else(|e| AppEvent::Error(e.to_string()))
                 });
             },

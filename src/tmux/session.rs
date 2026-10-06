@@ -20,6 +20,54 @@ fn parse_sessions(text: &str) -> Result<Vec<Session>> {
         })
         .collect()
 }
+/// command 放最後：其餘欄位不會含 tab。
+const PANE_FORMAT: &str = "#{pane_id}\t#{pane_index}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}\t#{pane_active}\t#{window_zoomed_flag}\t#{@tmux_manager_dock}\t#{pane_current_command}";
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Snapshot {
+    pub sessions: Vec<Session>,
+    /// 選中 session 當前 window 的 pane；list-panes 失敗或沒有選取時為 None。
+    pub preview: Option<Vec<PanePreview>>,
+}
+/// 排除底部 prompt 列；window zoom 時只有 active pane 可見。
+fn parse_panes(text: &str) -> Result<Vec<PanePreview>> {
+    fn number<T: std::str::FromStr>(value: &str) -> Result<T> {
+        value.parse().map_err(|_| error("無效 pane 數值"))
+    }
+    let mut panes = Vec::new();
+    for line in text.lines() {
+        let parts: Vec<_> = line.splitn(10, '\t').collect();
+        if parts.len() != 10 {
+            return Err(error("無法解析 tmux pane"));
+        }
+        let active = parts[6] == "1";
+        if !parts[8].is_empty() || (parts[7] == "1" && !active) {
+            continue;
+        }
+        let layout = PaneLayout {
+            id: PaneId::parse(parts[0])?,
+            index: number(parts[1])?,
+            left: number(parts[2])?,
+            top: number(parts[3])?,
+            width: number(parts[4])?,
+            height: number(parts[5])?,
+            active,
+            command: parts[9].into(),
+        };
+        panes.push(PanePreview {
+            layout,
+            text: String::new(),
+        });
+    }
+    Ok(panes)
+}
+/// 依 pane id 填入擷取文字，行數取 cache 中的高度；已關閉的 pane 直接略過。
+fn fill_captures(panes: &mut [PanePreview], cache: &[PaneLayout], captured: &[String]) {
+    for (cached, text) in cache.iter().zip(captured) {
+        if let Some(pane) = panes.iter_mut().find(|p| p.layout.id == cached.id) {
+            pane.text = tail(text, usize::from(cached.height));
+        }
+    }
+}
 fn no_server(stderr: &str) -> bool {
     stderr.contains("no server running")
         || stderr.contains("No such file or directory")
@@ -54,37 +102,63 @@ fn sections(output: &str, section: &str) -> Vec<String> {
 }
 impl TmuxClient {
     pub async fn list_sessions(&self) -> Result<Vec<Session>> {
-        Ok(self.snapshot(None).await?.0)
+        Ok(self.snapshot(None).await?.sessions)
     }
-    /// 單次 tmux 呼叫取得 session 清單與（選填）該 session active pane 的 preview。
+    /// 單次 tmux 呼叫取得 session 清單與（選填）該 session 當前 window 的 pane preview。
     pub async fn snapshot(
         &self,
-        selected: Option<&SessionId>,
-    ) -> Result<(Vec<Session>, Option<String>)> {
-        let start = format!("-{}", PREVIEW_LINES - 1);
+        selected: Option<(&SessionId, &[PaneLayout])>,
+    ) -> Result<Snapshot> {
         let section = section_marker();
+        // session ID 加冒號即該 session 的當前 window。
+        let target = selected.map(|(id, _)| format!("{}:", id.as_str()));
+        let cache = selected.map_or(&[][..], |(_, cache)| cache);
+        let starts: Vec<_> = cache
+            .iter()
+            .map(|pane| format!("-{}", pane.height.saturating_sub(1)))
+            .collect();
         let mut args = vec!["list-sessions", "-F", LIST_FORMAT];
-        if let Some(id) = selected {
+        if let Some(target) = &target {
             args.extend([";", "display-message", "-p", &section, ";"]);
-            args.extend(capture_args(id.as_str(), &start));
+            args.extend(["list-panes", "-t", target, "-F", PANE_FORMAT]);
+            for (pane, start) in cache.iter().zip(&starts) {
+                args.extend([";", "display-message", "-p", &section, ";"]);
+                args.extend(capture_args(pane.id.as_str(), start));
+            }
         }
         let output = self.run(&args, &[], false).await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let parts = sections(&stdout, &section);
-        // list-sessions 成功才會印出 sentinel；之後失敗的只有 capture。
+        // list-sessions 成功才會印出 sentinel。
         if output.status != 0 && parts.len() < 2 {
             if no_server(&output.stderr) {
-                return Ok((Vec::new(), None));
+                return Ok(Snapshot::default());
             }
             return Err(error(format!("tmux：{}", output.stderr.trim())));
         }
-        if parts.len() > 2 {
+        let expected = if target.is_some() { 2 + cache.len() } else { 1 };
+        if parts.len() > expected {
             return Err(error("tmux 擷取分段數量不符"));
         }
-        let preview = (output.status == 0)
-            .then(|| parts.get(1).map(|text| tail(text, PREVIEW_LINES)))
-            .flatten();
-        Ok((parse_sessions(&parts[0])?, preview))
+        // tmux 遇到失敗的指令即中止後續指令：list-panes 之後的 sentinel 有印出才代表它成功；
+        // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，text 保持空白。
+        let failed = output.status != 0;
+        let preview = match parts.get(1) {
+            Some(text) if !failed || parts.len() > 2 => {
+                let mut panes = parse_panes(text)?;
+                fill_captures(
+                    &mut panes,
+                    cache,
+                    &parts[2..parts.len() - usize::from(failed)],
+                );
+                Some(panes)
+            }
+            _ => None,
+        };
+        Ok(Snapshot {
+            sessions: parse_sessions(&parts[0])?,
+            preview,
+        })
     }
     pub async fn list_panes(&self, session: &SessionId) -> Result<Vec<Pane>> {
         let text = self.checked(&["list-panes", "-s", "-t", session.as_str(), "-F", "#{pane_id}\t#{session_name}/#{window_index}:#{window_name}.#{pane_index} (#{pane_current_command})\t#{@tmux_manager_dock}"]).await?;
