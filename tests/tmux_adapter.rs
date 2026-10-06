@@ -494,3 +494,14 @@ async fn captures_skip_blank_rows_that_pad_the_pane_height() {
         ["a1", "b1\nb2"]
     );
 }
+#[tokio::test]
+async fn unparsable_pane_lines_drop_only_the_preview() {
+    let out = format!("$2\twork\t1\t5\n{SENT}\nnot a pane line\n");
+    let runner = Arc::new(FakeRunner::new(vec![(0, &out, "")]));
+    let id = SessionId::parse("$2").unwrap();
+    let snapshot = TmuxClient::with_runner(None, runner)
+        .snapshot(Some((&id, &[])))
+        .await
+        .unwrap();
+    assert_eq!((snapshot.sessions.len(), snapshot.preview), (1, None));
+}

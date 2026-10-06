@@ -145,16 +145,16 @@ impl TmuxClient {
         // tmux 遇到失敗的指令即中止後續指令：list-panes 之後的 sentinel 有印出才代表它成功；
         // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，沿用上一輪文字。
         let failed = output.status != 0;
+        // pane 解析失敗只影響 preview，session 清單照常更新。
         let preview = match parts.get(1) {
-            Some(text) if !failed || parts.len() > 2 => {
-                let mut panes = parse_panes(text)?;
+            Some(text) if !failed || parts.len() > 2 => parse_panes(text).ok().map(|mut panes| {
                 fill_captures(
                     &mut panes,
                     cache,
                     &parts[2..parts.len() - usize::from(failed)],
                 );
-                Some(panes)
-            }
+                panes
+            }),
             _ => None,
         };
         Ok(Snapshot {
