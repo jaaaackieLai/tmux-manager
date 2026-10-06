@@ -5,5 +5,6 @@ pub mod manager_actions;
 pub mod manager_layout;
 pub mod manager_mouse;
 pub mod manager_sessions;
+pub mod preview;
 pub mod terminal;
 pub mod text;
