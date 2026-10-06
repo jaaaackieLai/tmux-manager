@@ -113,6 +113,26 @@ fn tag_push_publishes_every_artifact_the_installers_download() {
         );
     }
 }
+#[test]
+fn main_dispatch_publishes_and_reruns_fill_an_existing_release() {
+    // 發布流程是先合併、再從 main 手動觸發：workflow 依 Cargo 版本在觸發的 commit 建立 tag。
+    // Release 已存在（重跑或有人手動建立）時要補傳 binary，不能讓 latest release 停在空的狀態。
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workflow = std::fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
+    assert!(workflow.contains("workflow_dispatch:"));
+    assert!(
+        workflow.contains("github.ref == 'refs/heads/main'"),
+        "從 main 手動觸發要能發布"
+    );
+    assert!(
+        workflow.contains("--target \"$GITHUB_SHA\""),
+        "tag 要建在本次建置的 commit"
+    );
+    assert!(
+        workflow.contains("gh release upload") && workflow.contains("--clobber"),
+        "Release 已存在時要補傳 binary"
+    );
+}
 fn release_server(
     checksum: &str,
     artifact: &str,
