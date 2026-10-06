@@ -61,10 +61,10 @@ fn parse_panes(text: &str) -> Result<Vec<PanePreview>> {
     Ok(panes)
 }
 /// 依 pane id 填入擷取文字，行數取 cache 中的高度；已關閉的 pane 直接略過。
-fn fill_captures(panes: &mut [PanePreview], cache: &[PaneLayout], captured: &[String]) {
+fn fill_captures(panes: &mut [PanePreview], cache: &[PanePreview], captured: &[String]) {
     for (cached, text) in cache.iter().zip(captured) {
-        if let Some(pane) = panes.iter_mut().find(|p| p.layout.id == cached.id) {
-            pane.text = tail(text, usize::from(cached.height));
+        if let Some(pane) = panes.iter_mut().find(|p| p.layout.id == cached.layout.id) {
+            pane.text = tail(text, usize::from(cached.layout.height));
         }
     }
 }
@@ -107,7 +107,7 @@ impl TmuxClient {
     /// 單次 tmux 呼叫取得 session 清單與（選填）該 session 當前 window 的 pane preview。
     pub async fn snapshot(
         &self,
-        selected: Option<(&SessionId, &[PaneLayout])>,
+        selected: Option<(&SessionId, &[PanePreview])>,
     ) -> Result<Snapshot> {
         let section = section_marker();
         // session ID 加冒號即該 session 的當前 window。
@@ -115,7 +115,7 @@ impl TmuxClient {
         let cache = selected.map_or(&[][..], |(_, cache)| cache);
         let starts: Vec<_> = cache
             .iter()
-            .map(|pane| format!("-{}", pane.height.saturating_sub(1)))
+            .map(|pane| format!("-{}", pane.layout.height.saturating_sub(1)))
             .collect();
         let mut args = vec!["list-sessions", "-F", LIST_FORMAT];
         if let Some(target) = &target {
@@ -123,7 +123,7 @@ impl TmuxClient {
             args.extend(["list-panes", "-t", target, "-F", PANE_FORMAT]);
             for (pane, start) in cache.iter().zip(&starts) {
                 args.extend([";", "display-message", "-p", &section, ";"]);
-                args.extend(capture_args(pane.id.as_str(), start));
+                args.extend(capture_args(pane.layout.id.as_str(), start));
             }
         }
         let output = self.run(&args, &[], false).await?;

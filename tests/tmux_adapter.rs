@@ -123,7 +123,7 @@ async fn snapshot_parses_tmux_printable_control_character_separator() {
     let client = TmuxClient::with_runner(None, Arc::new(FakeRunner::new(vec![(0, &output, "")])));
     let id = SessionId::parse("$2").unwrap();
     let snapshot = client
-        .snapshot(Some((&id, std::slice::from_ref(&pane))))
+        .snapshot(Some((&id, &[blank(pane.clone())])))
         .await
         .unwrap();
     assert_eq!(snapshot.sessions.len(), 1);
@@ -152,7 +152,7 @@ async fn batch_preserves_old_marker_text_and_uses_a_fresh_marker_for_each_reques
     let client = TmuxClient::with_runner(None, runner.clone());
     let id = SessionId::parse("$2").unwrap();
     let preview = client
-        .snapshot(Some((&id, std::slice::from_ref(&pane))))
+        .snapshot(Some((&id, &[blank(pane.clone())])))
         .await
         .unwrap()
         .preview
@@ -206,7 +206,7 @@ async fn snapshot_without_selection_is_a_plain_session_list() {
 #[tokio::test]
 async fn snapshot_keeps_sessions_without_preview_when_list_panes_fails() {
     let id = SessionId::parse("$2").unwrap();
-    let cached = [layout("%1", 0, 0, 80, 24, true)];
+    let cached = [blank(layout("%1", 0, 0, 80, 24, true))];
     // 實測 tmux：list-panes 失敗即中止後續指令，輸出停在第一個 sentinel。
     for cache in [&[][..], &cached[..]] {
         let out = format!("$2\twork\t1\t5\n{SENT}\n");
@@ -310,7 +310,10 @@ async fn snapshot_captures_cached_panes_and_matches_text_by_pane_id() {
     let new = layout("%3", 1, 41, 39, 12, false);
     let right = layout("%2", 2, 41, 39, 11, false);
     // cache 順序與本輪 list-panes 不同，且高度可能已變；擷取行數以 cache 為準。
-    let cache = [layout("%2", 1, 41, 39, 24, false), left.clone()];
+    let cache = [
+        blank(layout("%2", 1, 41, 39, 24, false)),
+        blank(left.clone()),
+    ];
     let lines = |prefix: &str| -> String { (1..=30).map(|i| format!("{prefix}{i}\n")).collect() };
     let out = format!(
         "$2\twork\t1\t5\n{SENT}\n{}{}{}{SENT}\n{}{SENT}\n{}",
@@ -362,9 +365,9 @@ async fn snapshot_keeps_panes_when_a_closed_cached_pane_aborts_the_captures() {
     let left = layout("%1", 0, 0, 40, 24, true);
     let right = layout("%2", 1, 41, 39, 24, false);
     let cache = [
-        left.clone(),
-        layout("%9", 1, 41, 39, 24, false),
-        right.clone(),
+        blank(left.clone()),
+        blank(layout("%9", 1, 41, 39, 24, false)),
+        blank(right.clone()),
     ];
     // 實測 tmux：capture-pane 失敗即中止後續指令，status 為 1，之前的輸出保留。
     let out = format!(
@@ -401,7 +404,7 @@ async fn snapshot_rejects_extra_sections_instead_of_misattributing_pane_output()
     let id = SessionId::parse("$2").unwrap();
     assert!(
         TmuxClient::with_runner(None, runner)
-            .snapshot(Some((&id, &[left, right])))
+            .snapshot(Some((&id, &[blank(left), blank(right)])))
             .await
             .is_err()
     );
@@ -490,7 +493,7 @@ async fn captures_skip_blank_rows_that_pad_the_pane_height() {
     let client = TmuxClient::with_runner(None, runner);
     let id = SessionId::parse("$2").unwrap();
     let preview = client
-        .snapshot(Some((&id, std::slice::from_ref(&pane))))
+        .snapshot(Some((&id, &[blank(pane.clone())])))
         .await
         .unwrap()
         .preview

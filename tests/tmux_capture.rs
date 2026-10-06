@@ -2,7 +2,7 @@ use std::time::Duration;
 use tmux_manager::{
     ai::{AiClient, AiService},
     app::event::AppEvent,
-    tmux::{PaneId, PaneLayout, PanePreview, SessionId, TmuxClient},
+    tmux::{PaneId, PanePreview, SessionId, TmuxClient},
 };
 
 /// Workspace 第一個 pane 印出的內容。
@@ -127,18 +127,13 @@ impl Workspace {
         panic!("pane did not print {marker}");
     }
 
-    async fn layouts(&self, cache: &[PaneLayout]) -> Vec<PaneLayout> {
-        let snapshot = self
-            .client
+    async fn previews(&self, cache: &[PanePreview]) -> Vec<PanePreview> {
+        self.client
             .snapshot(Some((&self.session, cache)))
             .await
-            .unwrap();
-        snapshot
+            .unwrap()
             .preview
             .unwrap()
-            .into_iter()
-            .map(|p| p.layout)
-            .collect()
     }
 }
 
@@ -156,7 +151,7 @@ impl Drop for Workspace {
 #[ignore = "需要真實 tmux 與隔離 socket 權限"]
 async fn real_tmux_batch_preview_and_capture_preserve_workspace_output() {
     let workspace = Workspace::new().await;
-    let cache = workspace.layouts(&[]).await;
+    let cache = workspace.previews(&[]).await;
     let snapshot = workspace
         .client
         .snapshot(Some((&workspace.session, &cache)))
@@ -194,7 +189,7 @@ async fn real_tmux_snapshot_previews_every_pane_of_the_current_window() {
     assert!(first[0].layout.left < first[1].layout.left);
     assert_eq!(first[0].layout.top, first[1].layout.top);
     assert_eq!(texts(&first), ["", ""]);
-    let cache: Vec<_> = first.into_iter().map(|p| p.layout).collect();
+    let cache = first;
     let second = workspace
         .client
         .snapshot(Some((&workspace.session, &cache)))
@@ -210,7 +205,7 @@ async fn real_tmux_snapshot_previews_every_pane_of_the_current_window() {
 async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
     let workspace = Workspace::new().await;
     let closed = workspace.split_right("CLOSED-PANE-MARKER").await;
-    let mut cache = workspace.layouts(&[]).await;
+    let mut cache = workspace.previews(&[]).await;
     workspace
         .client
         .checked(&["kill-pane", "-t", closed.as_str()])
@@ -218,9 +213,9 @@ async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
         .unwrap();
     workspace.split_right("RIGHT-PANE-MARKER").await;
     // 已關閉的 pane 夾在中間：tmux 會在它的 capture 失敗後中止後續指令。
-    cache.extend(workspace.layouts(&[]).await.into_iter().skip(1));
+    cache.extend(workspace.previews(&[]).await.into_iter().skip(1));
     assert_eq!(cache.len(), 3);
-    assert_eq!(cache[1].id, closed);
+    assert_eq!(cache[1].layout.id, closed);
     let stale = workspace
         .client
         .snapshot(Some((&workspace.session, &cache)))
@@ -229,7 +224,7 @@ async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
     assert_eq!(stale.sessions.len(), 1);
     let stale = stale.preview.unwrap();
     assert_eq!(texts(&stale), [WORKSPACE_TEXT, ""]);
-    let cache: Vec<_> = stale.into_iter().map(|p| p.layout).collect();
+    let cache = stale;
     let fresh = workspace
         .client
         .snapshot(Some((&workspace.session, &cache)))

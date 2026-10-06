@@ -7,7 +7,7 @@ use crate::{
     ai::{AiClient, AiService},
     config::Config,
     prompts::{PromptStore, paste::PasteTarget, runtime as prompts},
-    tmux::{PaneLayout, SessionId, TmuxClient},
+    tmux::{PanePreview, SessionId, TmuxClient},
     ui::{
         form, manager,
         terminal::{self, Input, TerminalGuard},
@@ -51,7 +51,7 @@ pub async fn run(
     let mut io_busy = false;
     let mut dirty = true;
     let mut hits = crate::ui::manager_mouse::ManagerHitMap::default();
-    let pane_cache = Arc::new(Mutex::new(Vec::<PaneLayout>::new()));
+    let pane_cache = Arc::new(Mutex::new(Vec::<PanePreview>::new()));
     loop {
         if dirty {
             terminal.draw(|f| {
@@ -80,7 +80,7 @@ pub async fn run(
                     let panes = cache.lock().unwrap().clone();
                     let result = client.snapshot(selected.as_ref().map(|id| (id,panes.as_slice()))).await.map(|snapshot| {
                         let text = snapshot.preview.and_then(|panes| {
-                            *cache.lock().unwrap() = panes.iter().map(|p| p.layout.clone()).collect();
+                            *cache.lock().unwrap() = panes.clone();
                             panes.into_iter().find(|p| p.layout.active).map(|p| p.text)
                         });
                         AppEvent::Refresh { sessions: snapshot.sessions,preview: selected.zip(text) }
