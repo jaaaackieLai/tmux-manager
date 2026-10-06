@@ -338,3 +338,16 @@ async fn a_panicking_background_refresh_still_reports_back() {
         _ => panic!("panicking refresh sent no error event"),
     }
 }
+
+#[test]
+fn losing_the_selected_session_drops_its_preview() {
+    let mut app = app();
+    app.selected = 0;
+    let remaining = app.sessions[1..].to_vec();
+    app.replace_sessions(remaining);
+    assert_eq!(app.selected_id(), Some(&SessionId::parse("$2").unwrap()));
+    assert!(
+        app.preview.is_empty(),
+        "panes of the vanished session stayed as preview and capture cache"
+    );
+}
