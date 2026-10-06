@@ -254,16 +254,21 @@ async fn snapshot_lists_sessions_and_current_window_panes_in_one_invocation() {
     let left = layout("%1", 0, 0, 40, 24, true);
     let right = layout("%2", 1, 41, 39, 24, false);
     let out = format!(
-        "$2\twork\t1\t5\n{SENT}\n{}{}",
+        "$2\twork\t1\t5\n{SENT}\n{}{}{SENT}\nL\n{SENT}\nR\n",
         pane_line(&left, false, ""),
         pane_line(&right, false, "")
     );
     let runner = Arc::new(FakeRunner::new(vec![(0, &out, "")]));
     let client = TmuxClient::with_runner(None, runner.clone());
     let id = SessionId::parse("$2").unwrap();
-    let snapshot = client.snapshot(Some((&id, &[]))).await.unwrap();
+    // pane 組合沒變時只需要這一次呼叫。
+    let cache = [blank(left.clone()), blank(right.clone())];
+    let snapshot = client.snapshot(Some((&id, &cache))).await.unwrap();
     assert_eq!(snapshot.sessions.len(), 1);
-    assert_eq!(snapshot.preview.unwrap(), [blank(left), blank(right)]);
+    assert_eq!(
+        snapshot.preview.unwrap(),
+        [with_text(left, "L"), with_text(right, "R")]
+    );
     let calls = runner.calls.lock().unwrap();
     assert_eq!(calls.len(), 1);
     let tail = [
@@ -278,7 +283,7 @@ async fn snapshot_lists_sessions_and_current_window_panes_in_one_invocation() {
         "-F",
         PANE_FORMAT,
     ];
-    assert_eq!(calls[0].args[3..], tail.map(String::from));
+    assert_eq!(calls[0].args[3..13], tail.map(String::from));
 }
 #[tokio::test]
 async fn snapshot_captures_cached_panes_and_matches_text_by_pane_id() {
@@ -299,7 +304,10 @@ async fn snapshot_captures_cached_panes_and_matches_text_by_pane_id() {
         lines("r"),
         lines("l"),
     );
-    let runner = Arc::new(FakeRunner::new(vec![(0, &out, "")]));
+    let runner = Arc::new(FakeRunner::new(vec![
+        (0, &out, ""),
+        (0, &format!("n1\n{SENT}\n"), ""),
+    ]));
     let client = TmuxClient::with_runner(None, runner.clone());
     let id = SessionId::parse("$2").unwrap();
     let preview = client
@@ -311,12 +319,16 @@ async fn snapshot_captures_cached_panes_and_matches_text_by_pane_id() {
     let right_text: Vec<_> = (7..=30).map(|i| format!("r{i}")).collect();
     let expected = [
         with_text(left, "l28\nl29\nl30"),
-        blank(new),
+        with_text(new, "n1"),
         with_text(right, &right_text.join("\n")),
     ];
     assert_eq!(preview, expected);
     let calls = runner.calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        calls.len(),
+        2,
+        "only the new pane %3 needs a second capture"
+    );
     let section = calls[0].args[6].clone();
     let captures: Vec<_> = [("%2", "-23"), ("%1", "-2")]
         .into_iter()
@@ -400,7 +412,8 @@ async fn snapshot_rejects_extra_sections_instead_of_misattributing_pane_output()
 }
 async fn snapshot_preview(list_panes: &str) -> Vec<PanePreview> {
     let out = format!("$2\twork\t1\t5\n{SENT}\n{list_panes}");
-    let runner = Arc::new(FakeRunner::new(vec![(0, &out, "")]));
+    // 空 cache 會補擷取所有 pane；讓它失敗，text 留白，只看 pane 清單。
+    let runner = Arc::new(FakeRunner::new(vec![(0, &out, ""), (1, "", "fail")]));
     let id = SessionId::parse("$2").unwrap();
     TmuxClient::with_runner(None, runner)
         .snapshot(Some((&id, &[])))
@@ -504,4 +517,36 @@ async fn unparsable_pane_lines_drop_only_the_preview() {
         .await
         .unwrap();
     assert_eq!((snapshot.sessions.len(), snapshot.preview), (1, None));
+}
+#[tokio::test]
+async fn snapshot_captures_panes_missing_from_the_cache_right_away() {
+    let left = layout("%1", 0, 0, 40, 24, true);
+    let right = layout("%2", 1, 41, 39, 2, false);
+    let out = format!(
+        "$2\twork\t1\t5\n{SENT}\n{}{}{SENT}\nCACHED\n",
+        pane_line(&left, false, ""),
+        pane_line(&right, false, ""),
+    );
+    // 換選取或新分割時不必等下一輪：cache 沒有的 pane 立即補擷取，行數取各自高度。
+    let runner = Arc::new(FakeRunner::new(vec![
+        (0, &out, ""),
+        (0, &format!("r1\nr2\nr3\n{SENT}\n"), ""),
+    ]));
+    let id = SessionId::parse("$2").unwrap();
+    let preview = TmuxClient::with_runner(None, runner.clone())
+        .snapshot(Some((&id, &[blank(left.clone())])))
+        .await
+        .unwrap()
+        .preview
+        .unwrap();
+    assert_eq!(
+        preview,
+        [with_text(left, "CACHED"), with_text(right, "r2\nr3")]
+    );
+    let calls = runner.calls.lock().unwrap();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(
+        calls[1].args[..6],
+        ["capture-pane", "-p", "-t", "%2", "-S", "-1"]
+    );
 }

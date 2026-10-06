@@ -106,7 +106,8 @@ impl TmuxClient {
     pub async fn list_sessions(&self) -> Result<Vec<Session>> {
         Ok(self.snapshot(None).await?.sessions)
     }
-    /// 單次 tmux 呼叫取得 session 清單與（選填）該 session 當前 window 的 pane preview。
+    /// 一次 tmux 呼叫取得 session 清單與（選填）該 session 當前 window 的 pane preview；
+    /// 只有 pane 組合改變時才多一次補擷取。
     pub async fn snapshot(
         &self,
         selected: Option<(&SessionId, &[PanePreview])>,
@@ -146,7 +147,7 @@ impl TmuxClient {
         // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，沿用上一輪文字。
         let failed = output.status != 0;
         // pane 解析失敗只影響 preview，session 清單照常更新。
-        let preview = match parts.get(1) {
+        let mut preview = match parts.get(1) {
             Some(text) if !failed || parts.len() > 2 => parse_panes(text).ok().map(|mut panes| {
                 fill_captures(
                     &mut panes,
@@ -157,10 +158,29 @@ impl TmuxClient {
             }),
             _ => None,
         };
+        if let Some(panes) = &mut preview {
+            self.capture_new(panes, cache).await;
+        }
         Ok(Snapshot {
             sessions: parse_sessions(&parts[0])?,
             preview,
         })
+    }
+    /// cache 沒有的 pane（換選取、新分割、換 window）立即補擷取，不必等下一輪。
+    async fn capture_new(&self, panes: &mut [PanePreview], cache: &[PanePreview]) {
+        let new: Vec<_> = panes
+            .iter_mut()
+            .filter(|pane| !cache.iter().any(|c| c.layout.id == pane.layout.id))
+            .collect();
+        let ids: Vec<_> = new.iter().map(|pane| pane.layout.id.clone()).collect();
+        let lines = new.iter().map(|pane| pane.layout.height).max();
+        let lines = usize::from(lines.unwrap_or(0));
+        // 補擷取失敗（pane 剛關閉）時留白，下一輪再更新。
+        if let Ok(texts) = self.capture_many(&ids, lines).await {
+            for (pane, text) in new.into_iter().zip(texts) {
+                pane.text = tail(&text, usize::from(pane.layout.height));
+            }
+        }
     }
     pub async fn list_panes(&self, session: &SessionId) -> Result<Vec<Pane>> {
         let text = self.checked(&["list-panes", "-s", "-t", session.as_str(), "-F", "#{pane_id}\t#{session_name}/#{window_index}:#{window_name}.#{pane_index} (#{pane_current_command})\t#{@tmux_manager_dock}"]).await?;

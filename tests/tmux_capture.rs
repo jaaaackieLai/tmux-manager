@@ -185,7 +185,8 @@ async fn real_tmux_snapshot_previews_every_pane_of_the_current_window() {
     assert_eq!(first.len(), 2, "dock pane should be excluded: {first:?}");
     assert!(first[0].layout.left < first[1].layout.left);
     assert_eq!(first[0].layout.top, first[1].layout.top);
-    assert_eq!(texts(&first), ["", ""]);
+    // cache 是空的：所有 pane 都在同一次 snapshot 內補擷取。
+    assert_eq!(texts(&first), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
     let second = workspace.previews(&first).await;
     assert_eq!(texts(&second), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
 }
@@ -206,6 +207,7 @@ async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
     cache.extend(workspace.previews(&[]).await.into_iter().skip(1));
     assert_eq!(cache.len(), 3);
     assert_eq!(cache[1].layout.id, closed);
+    cache[2].text = "PREVIOUS-RIGHT-TEXT".into();
     let stale = workspace
         .client
         .snapshot(Some((&workspace.session, &cache)))
@@ -213,7 +215,8 @@ async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
         .unwrap();
     assert_eq!(stale.sessions.len(), 1);
     let stale = stale.preview.unwrap();
-    assert_eq!(texts(&stale), [WORKSPACE_TEXT, ""]);
+    // 中止後沒擷取到的 pane 沿用上一輪文字。
+    assert_eq!(texts(&stale), [WORKSPACE_TEXT, "PREVIOUS-RIGHT-TEXT"]);
     let fresh = workspace.previews(&stale).await;
     assert_eq!(texts(&fresh), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
 }
