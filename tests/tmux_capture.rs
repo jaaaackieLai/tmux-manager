@@ -78,19 +78,27 @@ impl Workspace {
             ])
             .await
             .unwrap();
+        workspace
+            .wait_for(workspace.session.as_str(), "WORKSPACE-CAPTURE-MARKER")
+            .await;
+        workspace
+    }
+
+    /// 等 target pane 印出 marker。
+    async fn wait_for(&self, target: &str, marker: &str) {
         for _ in 0..100 {
-            if workspace
+            if self
                 .client
-                .preview(&workspace.session)
+                .checked(&["capture-pane", "-p", "-t", target])
                 .await
                 .unwrap()
-                .contains("WORKSPACE-CAPTURE-MARKER")
+                .contains(marker)
             {
-                return workspace;
+                return;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        panic!("workspace did not print fixture output");
+        panic!("{target} did not print {marker}");
     }
 
     /// 在 active pane 右側切出新 pane 並等它印出 marker。
@@ -112,19 +120,8 @@ impl Workspace {
             .await
             .unwrap();
         let pane = PaneId::parse(pane.trim()).unwrap();
-        for _ in 0..100 {
-            if self
-                .client
-                .checked(&["capture-pane", "-p", "-t", pane.as_str()])
-                .await
-                .unwrap()
-                .contains(marker)
-            {
-                return pane;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        panic!("pane did not print {marker}");
+        self.wait_for(pane.as_str(), marker).await;
+        pane
     }
 
     async fn previews(&self, cache: &[PanePreview]) -> Vec<PanePreview> {
@@ -189,14 +186,7 @@ async fn real_tmux_snapshot_previews_every_pane_of_the_current_window() {
     assert!(first[0].layout.left < first[1].layout.left);
     assert_eq!(first[0].layout.top, first[1].layout.top);
     assert_eq!(texts(&first), ["", ""]);
-    let cache = first;
-    let second = workspace
-        .client
-        .snapshot(Some((&workspace.session, &cache)))
-        .await
-        .unwrap()
-        .preview
-        .unwrap();
+    let second = workspace.previews(&first).await;
     assert_eq!(texts(&second), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
 }
 
@@ -224,14 +214,7 @@ async fn real_tmux_snapshot_survives_a_closed_pane_in_the_cache() {
     assert_eq!(stale.sessions.len(), 1);
     let stale = stale.preview.unwrap();
     assert_eq!(texts(&stale), [WORKSPACE_TEXT, ""]);
-    let cache = stale;
-    let fresh = workspace
-        .client
-        .snapshot(Some((&workspace.session, &cache)))
-        .await
-        .unwrap()
-        .preview
-        .unwrap();
+    let fresh = workspace.previews(&stale).await;
     assert_eq!(texts(&fresh), [WORKSPACE_TEXT, "RIGHT-PANE-MARKER"]);
 }
 

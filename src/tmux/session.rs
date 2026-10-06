@@ -3,7 +3,6 @@ const LIST_FORMAT: &str = "#{session_id}\t#{session_name}\t#{session_windows}\t#
 fn section_marker() -> String {
     format!("\u{1}tmux-manager-section-{}\u{1}", uuid::Uuid::new_v4())
 }
-pub const PREVIEW_LINES: usize = 15;
 fn parse_sessions(text: &str) -> Result<Vec<Session>> {
     text.lines()
         .map(|line| {
@@ -180,10 +179,6 @@ impl TmuxClient {
         }
         Ok(panes)
     }
-    /// session 作為 target 時 tmux 會解析為其 active pane。
-    pub async fn preview(&self, session: &SessionId) -> Result<String> {
-        self.capture_target(session.as_str(), PREVIEW_LINES).await
-    }
     pub async fn rename(&self, session: &SessionId, name: &str) -> Result<()> {
         self.checked(&["rename-session", "-t", session.as_str(), name])
             .await
@@ -193,12 +188,6 @@ impl TmuxClient {
         self.checked(&["kill-session", "-t", session.as_str()])
             .await
             .map(|_| ())
-    }
-    async fn capture_target(&self, target: &str, lines: usize) -> Result<String> {
-        let start = format!("-{}", lines.saturating_sub(1));
-        let args = capture_args(target, &start);
-        let output = self.checked(&args).await?;
-        Ok(tail(&output, lines))
     }
     /// 單次 tmux 呼叫依序擷取多個 pane，每個 pane 取最後 `lines` 行。
     pub async fn capture_many(&self, panes: &[PaneId], lines: usize) -> Result<Vec<String>> {

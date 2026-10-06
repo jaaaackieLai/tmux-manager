@@ -177,24 +177,6 @@ async fn batch_preserves_old_marker_text_and_uses_a_fresh_marker_for_each_reques
     assert_ne!(markers[0], markers[1]);
 }
 #[tokio::test]
-async fn preview_captures_the_session_target_which_is_its_active_pane() {
-    let runner = Arc::new(FakeRunner::new(vec![(0, "ACTIVE OUTPUT\n", "")]));
-    let client = TmuxClient::with_runner(None, runner.clone());
-    assert_eq!(
-        client
-            .preview(&SessionId::parse("$2").unwrap())
-            .await
-            .unwrap(),
-        "ACTIVE OUTPUT"
-    );
-    let calls = runner.calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
-    assert_eq!(
-        calls[0].args,
-        ["capture-pane", "-p", "-t", "$2", "-S", "-14"]
-    );
-}
-#[tokio::test]
 async fn snapshot_without_selection_is_a_plain_session_list() {
     let runner = Arc::new(FakeRunner::new(vec![(0, "$2\twork\t1\t5\n", "")]));
     let client = TmuxClient::with_runner(None, runner.clone());
