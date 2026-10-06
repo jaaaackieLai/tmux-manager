@@ -1,6 +1,7 @@
 name: 發布 v2 release
-# 推送 v* tag 時建置各平台 binary 並建立 GitHub Release。
-# 舊版（Bash v1.x）`--update` 會改跑 install.sh 下載 latest release，因此合併前必須先發布。
+# 建置各平台 binary 並建立 GitHub Release。正常流程是 PR 合併後從 main 手動觸發：
+# 依 Cargo.toml 版本在觸發的 commit 建立 v<version> tag。推送 v* tag 也會觸發（tag 須與版本一致）。
+# 其他分支手動觸發只建置不發布。
 on:
   push:
     tags:
@@ -64,25 +65,41 @@ jobs:
           path: artifacts/*
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: tag 必須與 Cargo 版本一致
+      - name: 決定 tag（須與 Cargo 版本一致）
+        id: tag
         shell: bash
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          if [[ "$GITHUB_REF_NAME" != "v${version}" ]]; then
+          tag="v${version}"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo "tag ${GITHUB_REF_NAME} 與 Cargo 版本 ${version} 不符" >&2
             exit 1
           fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-      - name: 建立 GitHub Release
+      - name: 建立 GitHub Release，已存在則補傳 binary
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "$GITHUB_REF_NAME" --generate-notes
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # 既有 tag 必須指向本次建置的 commit；否則是忘了 bump 版本，不能覆蓋舊版的 binary。
+          if sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha 2>/dev/null)" \
+            && [[ "$sha" != "$GITHUB_SHA" ]]; then
+            echo "${TAG} 已指向 ${sha}，不是本次建置的 ${GITHUB_SHA}；請先 bump 版本" >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* --title "$TAG" --generate-notes --target "$GITHUB_SHA"
+          fi
