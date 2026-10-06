@@ -6,6 +6,7 @@ pub mod session;
 use crate::{Result, error::error};
 use command::{CommandOutput, CommandRequest, ProcessRunner, Runner};
 pub use model::*;
+pub use session::Snapshot;
 use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct TmuxClient {

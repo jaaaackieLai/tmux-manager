@@ -60,7 +60,7 @@ pub async fn run(
             Some(message) = receiver.recv() => match message {
                 AppEvent::Refresh { sessions,preview } => {
                     io_busy = false; dirty |= app.replace_sessions(sessions); dirty |= app.refresh_succeeded();
-                    if let Some((id,text)) = preview { if app.selected_id() == Some(&id) && app.preview != text { app.preview = text; dirty = true; } }
+                    if let Some((id,panes)) = preview { if app.selected_id() == Some(&id) && app.preview != panes { app.preview = panes; dirty = true; } }
                 },
                 AppEvent::AiResult { session_id,generation,result } => dirty |= app.apply_ai(session_id,generation,result),
                 AppEvent::Error(message) => { io_busy = false; dirty |= app.show_refresh_error(message); },
@@ -70,8 +70,10 @@ pub async fn run(
                 // 操作選單只覆蓋部分列表；背景 Preview 仍持續更新。
                 let selected = app.selected_id().cloned();
                 let client = tmux.clone();
+                // 上一輪的 pane 清單決定本輪擷取哪些 pane；換選取時已清空。
+                let cache = app.preview.clone();
                 event::spawn_event(sender.clone(), async move {
-                    let result = client.snapshot(selected.as_ref()).await.map(|(sessions,text)| AppEvent::Refresh { sessions,preview: selected.zip(text) });
+                    let result = client.snapshot(selected.as_ref().map(|id| (id,cache.as_slice()))).await.map(|snapshot| AppEvent::Refresh { sessions: snapshot.sessions,preview: selected.zip(snapshot.preview) });
                     result.unwrap_or_else(|e| AppEvent::Error(e.to_string()))
                 });
             },

@@ -3,7 +3,6 @@ const LIST_FORMAT: &str = "#{session_id}\t#{session_name}\t#{session_windows}\t#
 fn section_marker() -> String {
     format!("\u{1}tmux-manager-section-{}\u{1}", uuid::Uuid::new_v4())
 }
-pub const PREVIEW_LINES: usize = 15;
 fn parse_sessions(text: &str) -> Result<Vec<Session>> {
     text.lines()
         .map(|line| {
@@ -19,6 +18,57 @@ fn parse_sessions(text: &str) -> Result<Vec<Session>> {
             })
         })
         .collect()
+}
+/// command 放最後：其餘欄位不會含 tab。
+const PANE_FORMAT: &str = "#{pane_id}\t#{pane_index}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}\t#{pane_active}\t#{window_zoomed_flag}\t#{@tmux_manager_dock}\t#{pane_current_command}";
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Snapshot {
+    pub sessions: Vec<Session>,
+    /// 選中 session 當前 window 的 pane；list-panes 失敗或沒有選取時為 None。
+    pub preview: Option<Vec<PanePreview>>,
+}
+/// 排除底部 prompt 列；window zoom 時只有 active pane 可見。
+fn parse_panes(text: &str) -> Result<Vec<PanePreview>> {
+    fn number<T: std::str::FromStr>(value: &str) -> Result<T> {
+        value.parse().map_err(|_| error("無效 pane 數值"))
+    }
+    let mut panes = Vec::new();
+    for line in text.lines() {
+        let parts: Vec<_> = line.splitn(10, '\t').collect();
+        if parts.len() != 10 {
+            return Err(error("無法解析 tmux pane"));
+        }
+        let active = parts[6] == "1";
+        if !parts[8].is_empty() || (parts[7] == "1" && !active) {
+            continue;
+        }
+        let layout = PaneLayout {
+            id: PaneId::parse(parts[0])?,
+            index: number(parts[1])?,
+            left: number(parts[2])?,
+            top: number(parts[3])?,
+            width: number(parts[4])?,
+            height: number(parts[5])?,
+            active,
+            command: parts[9].into(),
+        };
+        panes.push(PanePreview {
+            layout,
+            text: String::new(),
+        });
+    }
+    Ok(panes)
+}
+/// 依 pane id 填入擷取文字，行數取 cache 中的高度；本輪沒擷取到的 pane 沿用上一輪文字。
+fn fill_captures(panes: &mut [PanePreview], cache: &[PanePreview], captured: &[String]) {
+    for (n, cached) in cache.iter().enumerate() {
+        if let Some(pane) = panes.iter_mut().find(|p| p.layout.id == cached.layout.id) {
+            pane.text = match captured.get(n) {
+                Some(text) => tail(text, usize::from(cached.layout.height)),
+                None => cached.text.clone(),
+            };
+        }
+    }
 }
 fn no_server(stderr: &str) -> bool {
     stderr.contains("no server running")
@@ -54,37 +104,83 @@ fn sections(output: &str, section: &str) -> Vec<String> {
 }
 impl TmuxClient {
     pub async fn list_sessions(&self) -> Result<Vec<Session>> {
-        Ok(self.snapshot(None).await?.0)
+        Ok(self.snapshot(None).await?.sessions)
     }
-    /// 單次 tmux 呼叫取得 session 清單與（選填）該 session active pane 的 preview。
+    /// 一次 tmux 呼叫取得 session 清單與（選填）該 session 當前 window 的 pane preview；
+    /// 只有 pane 組合改變時才多一次補擷取。
     pub async fn snapshot(
         &self,
-        selected: Option<&SessionId>,
-    ) -> Result<(Vec<Session>, Option<String>)> {
-        let start = format!("-{}", PREVIEW_LINES - 1);
+        selected: Option<(&SessionId, &[PanePreview])>,
+    ) -> Result<Snapshot> {
         let section = section_marker();
+        // session ID 加冒號即該 session 的當前 window。
+        let target = selected.map(|(id, _)| format!("{}:", id.as_str()));
+        let cache = selected.map_or(&[][..], |(_, cache)| cache);
+        let starts: Vec<_> = cache
+            .iter()
+            .map(|pane| format!("-{}", pane.layout.height.saturating_sub(1)))
+            .collect();
         let mut args = vec!["list-sessions", "-F", LIST_FORMAT];
-        if let Some(id) = selected {
+        if let Some(target) = &target {
             args.extend([";", "display-message", "-p", &section, ";"]);
-            args.extend(capture_args(id.as_str(), &start));
+            args.extend(["list-panes", "-t", target, "-F", PANE_FORMAT]);
+            for (pane, start) in cache.iter().zip(&starts) {
+                args.extend([";", "display-message", "-p", &section, ";"]);
+                args.extend(capture_args(pane.layout.id.as_str(), start));
+            }
         }
         let output = self.run(&args, &[], false).await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let parts = sections(&stdout, &section);
-        // list-sessions 成功才會印出 sentinel；之後失敗的只有 capture。
+        // list-sessions 成功才會印出 sentinel。
         if output.status != 0 && parts.len() < 2 {
             if no_server(&output.stderr) {
-                return Ok((Vec::new(), None));
+                return Ok(Snapshot::default());
             }
             return Err(error(format!("tmux：{}", output.stderr.trim())));
         }
-        if parts.len() > 2 {
+        let expected = if target.is_some() { 2 + cache.len() } else { 1 };
+        if parts.len() > expected {
             return Err(error("tmux 擷取分段數量不符"));
         }
-        let preview = (output.status == 0)
-            .then(|| parts.get(1).map(|text| tail(text, PREVIEW_LINES)))
-            .flatten();
-        Ok((parse_sessions(&parts[0])?, preview))
+        // tmux 遇到失敗的指令即中止後續指令：list-panes 之後的 sentinel 有印出才代表它成功；
+        // 失敗的 capture 是最後一段，之後的 pane 沒有輸出，沿用上一輪文字。
+        let failed = output.status != 0;
+        // pane 解析失敗只影響 preview，session 清單照常更新。
+        let mut preview = match parts.get(1) {
+            Some(text) if !failed || parts.len() > 2 => parse_panes(text).ok().map(|mut panes| {
+                fill_captures(
+                    &mut panes,
+                    cache,
+                    &parts[2..parts.len() - usize::from(failed)],
+                );
+                panes
+            }),
+            _ => None,
+        };
+        if let Some(panes) = &mut preview {
+            self.capture_new(panes, cache).await;
+        }
+        Ok(Snapshot {
+            sessions: parse_sessions(&parts[0])?,
+            preview,
+        })
+    }
+    /// cache 沒有的 pane（換選取、新分割、換 window）立即補擷取，不必等下一輪。
+    async fn capture_new(&self, panes: &mut [PanePreview], cache: &[PanePreview]) {
+        let new: Vec<_> = panes
+            .iter_mut()
+            .filter(|pane| !cache.iter().any(|c| c.layout.id == pane.layout.id))
+            .collect();
+        let ids: Vec<_> = new.iter().map(|pane| pane.layout.id.clone()).collect();
+        let lines = new.iter().map(|pane| pane.layout.height).max();
+        let lines = usize::from(lines.unwrap_or(0));
+        // 補擷取失敗（pane 剛關閉）時留白，下一輪再更新。
+        if let Ok(texts) = self.capture_many(&ids, lines).await {
+            for (pane, text) in new.into_iter().zip(texts) {
+                pane.text = tail(&text, usize::from(pane.layout.height));
+            }
+        }
     }
     pub async fn list_panes(&self, session: &SessionId) -> Result<Vec<Pane>> {
         let text = self.checked(&["list-panes", "-s", "-t", session.as_str(), "-F", "#{pane_id}\t#{session_name}/#{window_index}:#{window_name}.#{pane_index} (#{pane_current_command})\t#{@tmux_manager_dock}"]).await?;
@@ -103,10 +199,6 @@ impl TmuxClient {
         }
         Ok(panes)
     }
-    /// session 作為 target 時 tmux 會解析為其 active pane。
-    pub async fn preview(&self, session: &SessionId) -> Result<String> {
-        self.capture_target(session.as_str(), PREVIEW_LINES).await
-    }
     pub async fn rename(&self, session: &SessionId, name: &str) -> Result<()> {
         self.checked(&["rename-session", "-t", session.as_str(), name])
             .await
@@ -116,12 +208,6 @@ impl TmuxClient {
         self.checked(&["kill-session", "-t", session.as_str()])
             .await
             .map(|_| ())
-    }
-    async fn capture_target(&self, target: &str, lines: usize) -> Result<String> {
-        let start = format!("-{}", lines.saturating_sub(1));
-        let args = capture_args(target, &start);
-        let output = self.checked(&args).await?;
-        Ok(tail(&output, lines))
     }
     /// 單次 tmux 呼叫依序擷取多個 pane，每個 pane 取最後 `lines` 行。
     pub async fn capture_many(&self, panes: &[PaneId], lines: usize) -> Result<Vec<String>> {

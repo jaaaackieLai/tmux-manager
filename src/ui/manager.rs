@@ -1,6 +1,5 @@
 use crate::{
     app::{AppState, Screen},
-    tmux::session::PREVIEW_LINES,
     ui::{
         manager_layout::Panels,
         manager_mouse::{ManagerHit, ManagerHitMap},
@@ -10,7 +9,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Paragraph, Wrap},
 };
 pub fn render(frame: &mut Frame, app: &AppState) -> ManagerHitMap {
     let mut hits = ManagerHitMap::default();
@@ -68,20 +67,7 @@ pub fn render(frame: &mut Frame, app: &AppState) -> ManagerHitMap {
         );
         hits.rows
             .extend(crate::ui::manager_sessions::render(frame, body[0], app));
-        let preview_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
-            .title(format!(
-                " Preview · {} · 最後 {PREVIEW_LINES} 行 ",
-                app.sessions
-                    .get(app.selected)
-                    .map(|s| s.name.as_str())
-                    .unwrap_or("—")
-            ));
-        let visible = usize::from(preview_block.inner(body[1]).height);
-        let lines: Vec<_> = app.preview.lines().collect();
-        let preview = lines[lines.len().saturating_sub(visible)..].join("\n");
-        frame.render_widget(Paragraph::new(preview).block(preview_block), body[1]);
+        crate::ui::preview::render(frame, body[1], app);
     }
     let keys = if app.screen == Screen::List {
         "[↑↓/Tab] 選擇 [Enter] 操作 [p] prompts [n] 新增 [f] 更新 [q] 離開"

@@ -20,7 +20,7 @@ fn app_with(count: usize) -> AppState {
     app
 }
 
-use support::render::row_text;
+use support::{preview::pane, render::row_text};
 
 #[test]
 fn small_session_list_uses_content_height_and_releases_room_for_preview() {
@@ -78,10 +78,8 @@ fn session_rows_have_spacing_aligned_columns_and_a_visible_selection_background(
 #[test]
 fn short_preview_keeps_the_latest_output_visible() {
     let mut app = app_with(1);
-    app.preview = (1..=15)
-        .map(|i| format!("OUTPUT-{i:02}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let output: Vec<_> = (1..=15).map(|i| format!("OUTPUT-{i:02}")).collect();
+    app.preview = vec![pane(0, 0, 80, true, "zsh", &output.join("\n"))];
     let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
     terminal
         .draw(|frame| {
@@ -90,9 +88,38 @@ fn short_preview_keeps_the_latest_output_visible() {
         .unwrap();
     assert!(
         (0..12).any(|y| row_text(&terminal, y).contains("OUTPUT-15")),
-        "latest output is hidden by the small preview"
+        "latest output is hidden by the small preview:\n{}",
+        (0..12)
+            .map(|y| row_text(&terminal, y))
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     assert!(!(0..12).any(|y| row_text(&terminal, y).contains("OUTPUT-01")));
+}
+
+#[test]
+fn preview_shows_every_pane_of_the_selected_window_side_by_side() {
+    let mut app = app_with(1);
+    app.preview = vec![
+        pane(0, 0, 40, true, "claude", "LEFT-OUTPUT"),
+        pane(1, 41, 39, false, "zsh", "RIGHT-OUTPUT"),
+    ];
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal
+        .draw(|frame| {
+            tmux_manager::ui::manager::render(frame, &app);
+        })
+        .unwrap();
+    let title = (0..24)
+        .find(|y| row_text(&terminal, *y).contains("Preview · session-0"))
+        .expect("preview title names the selected session");
+    let row = row_text(&terminal, title + 1);
+    assert!(row.contains("0: claude") && row.contains("1: zsh"), "{row}");
+    let row = row_text(&terminal, title + 2);
+    assert!(
+        row.contains("LEFT-OUTPUT") && row.contains("RIGHT-OUTPUT"),
+        "{row}"
+    );
 }
 
 #[test]

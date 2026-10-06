@@ -1,7 +1,7 @@
 use crate::ui::manager_mouse::{ManagerHit, ManagerHitMap};
 use crate::{
     ai::AiSummary,
-    tmux::{Session, SessionId},
+    tmux::{PanePreview, Session, SessionId},
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Position;
@@ -38,7 +38,8 @@ pub struct AppState {
     pub screen: Screen,
     pub ai: HashMap<SessionId, std::result::Result<AiSummary, String>>,
     pub generation: u64,
-    pub preview: String,
+    /// 選中 session 當前 window 的 pane；同時是下一輪擷取的 cache。
+    pub preview: Vec<PanePreview>,
     pub status: String,
     pub split_percent: Option<u16>,
     pub dragging_split: bool,
@@ -116,15 +117,14 @@ impl AppState {
             .selected_id()
             .and_then(|id| sessions.iter().position(|s| &s.id == id));
         self.selected = kept.unwrap_or(self.selected.min(sessions.len().saturating_sub(1)));
-        // 詳細頁的 session 消失時回到列表，避免操作改指向其他 session。
+        // 選中的 session 消失時回到列表，避免操作改指向其他 session；
+        // 舊 session 的 pane 也不能留作新選取的 preview 與擷取 cache。
         if kept.is_none() {
             self.screen = Screen::List;
+            self.preview.clear();
         }
         self.ai.retain(|id, _| sessions.iter().any(|s| &s.id == id));
         self.sessions = sessions;
-        if self.sessions.is_empty() {
-            self.preview.clear();
-        }
         changed
     }
     pub fn apply_ai(

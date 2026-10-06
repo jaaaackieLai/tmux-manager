@@ -1,12 +1,12 @@
 use crate::{
     ai::AiSummary,
-    tmux::{Session, SessionId},
+    tmux::{PanePreview, Session, SessionId},
 };
 pub enum AppEvent {
     Error(String),
     Refresh {
         sessions: Vec<Session>,
-        preview: Option<(SessionId, String)>,
+        preview: Option<(SessionId, Vec<PanePreview>)>,
     },
     AiResult {
         session_id: SessionId,
