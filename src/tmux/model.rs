@@ -66,5 +66,16 @@ pub struct PaneLayout {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PanePreview {
     pub layout: PaneLayout,
+    /// 擷取內容，尾端空白行已去除。
     pub text: String,
+}
+impl AsRef<PaneLayout> for PaneLayout {
+    fn as_ref(&self) -> &PaneLayout {
+        self
+    }
+}
+impl AsRef<PaneLayout> for PanePreview {
+    fn as_ref(&self) -> &PaneLayout {
+        &self.layout
+    }
 }

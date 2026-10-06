@@ -23,10 +23,12 @@ pub const MIN_WIDTH: u16 = 8;
 pub const MIN_HEIGHT: u16 = 2;
 
 /// 依 tmux 座標把 panes 縮放進 `inner`；放不下時改成上下堆疊。
-pub fn compute(inner: Rect, panes: &[PaneLayout]) -> PreviewLayout {
+pub fn compute(inner: Rect, panes: &[impl AsRef<PaneLayout>]) -> PreviewLayout {
     if panes.is_empty() || inner.is_empty() {
         return PreviewLayout::default();
     }
+    let panes: Vec<&PaneLayout> = panes.iter().map(AsRef::as_ref).collect();
+    let panes = panes.as_slice();
     let layout = grid(inner, panes);
     let fits = layout
         .slots
@@ -36,7 +38,7 @@ pub fn compute(inner: Rect, panes: &[PaneLayout]) -> PreviewLayout {
 }
 
 /// 全寬上下堆疊，依 index 排序；放不下時優先保留 active pane。
-fn stack(inner: Rect, panes: &[PaneLayout]) -> PreviewLayout {
+fn stack(inner: Rect, panes: &[&PaneLayout]) -> PreviewLayout {
     let mut order: Vec<usize> = (0..panes.len()).collect();
     order.sort_by_key(|&i| panes[i].index);
     // k 個 pane 需要 k * MIN_HEIGHT + (k - 1) 列；至少顯示一個。
@@ -111,13 +113,14 @@ fn edges(pane: &PaneLayout) -> [i32; 4] {
     ]
 }
 
-fn grid(inner: Rect, panes: &[PaneLayout]) -> PreviewLayout {
-    let all: Vec<_> = panes.iter().map(edges).collect();
+fn grid(inner: Rect, panes: &[&PaneLayout]) -> PreviewLayout {
+    let all: Vec<_> = panes.iter().map(|pane| edges(pane)).collect();
     let bound = |side: usize| all.iter().map(move |e| e[side]);
     let (left, right) = (bound(0).min(), bound(2).max());
     let (top, bottom) = (bound(1).min(), bound(3).max());
-    let xs = Axis::new(left.unwrap_or(0), right.unwrap_or(1), inner.width);
-    let ys = Axis::new(top.unwrap_or(0), bottom.unwrap_or(1), inner.height);
+    // compute 已排除空的 panes，min/max 一定有值。
+    let xs = Axis::new(left.unwrap(), right.unwrap(), inner.width);
+    let ys = Axis::new(top.unwrap(), bottom.unwrap(), inner.height);
     let (ix, iy) = (i32::from(inner.x), i32::from(inner.y));
     let (iw, ih) = (i32::from(inner.width), i32::from(inner.height));
     let mut layout = PreviewLayout::default();

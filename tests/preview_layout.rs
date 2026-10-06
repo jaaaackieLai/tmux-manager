@@ -136,7 +136,7 @@ fn single_row_still_shows_the_active_pane_title() {
 #[test]
 fn empty_panes_or_area_produce_an_empty_layout() {
     assert_eq!(
-        compute(Rect::new(0, 0, 40, 10), &[]),
+        compute(Rect::new(0, 0, 40, 10), &[] as &[PaneLayout]),
         PreviewLayout::default()
     );
     let layout = compute(Rect::new(0, 0, 0, 0), &three_panes());
@@ -340,8 +340,11 @@ fn long_titles_and_lines_are_clipped_on_the_right_without_wrapping() {
 #[test]
 fn only_the_last_lines_that_fit_are_shown() {
     let text = (1..=9).map(|n| format!("line {n}")).collect::<Vec<_>>();
-    let text = format!("{}\n\n\n", text.join("\n"));
-    let panes = [preview(pane(0, 0, 0, 80, 24, true), "zsh", &text)];
+    let panes = [preview(
+        pane(0, 0, 0, 80, 24, true),
+        "zsh",
+        &text.join("\n"),
+    )];
     let terminal = draw(20, 6, &panes);
     let rows: Vec<_> = (1..5).map(|y| row_text(&terminal, y)).collect();
     assert_eq!(

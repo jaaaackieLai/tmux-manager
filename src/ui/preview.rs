@@ -31,8 +31,7 @@ pub fn render_panes(frame: &mut Frame, area: Rect, title: &str, panes: &[PanePre
         .title(title.to_string());
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let layouts: Vec<_> = panes.iter().map(|p| p.layout.clone()).collect();
-    let layout = preview_layout::compute(inner, &layouts);
+    let layout = preview_layout::compute(inner, panes);
     draw_separators(frame.buffer_mut(), area, &layout.separators);
     let last = layout.slots.len().saturating_sub(1);
     for (n, slot) in layout.slots.iter().enumerate() {
@@ -58,11 +57,7 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: &PanePreview, hidden: usize)
     } else {
         Style::default().fg(Color::Gray)
     };
-    // 底部空白列不算內容，避免輸出少時只看到空白。
-    let mut lines: Vec<&str> = pane.text.lines().collect();
-    while lines.last().is_some_and(|l| l.trim().is_empty()) {
-        lines.pop();
-    }
+    let lines: Vec<&str> = pane.text.lines().collect();
     // 只剩一列時最新輸出比標題重要。
     let titled = area.height >= preview_layout::MIN_HEIGHT;
     let visible = usize::from(area.height - u16::from(titled));
