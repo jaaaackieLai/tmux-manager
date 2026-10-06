@@ -1,7 +1,7 @@
 use tmux_manager::tmux::{PaneId, PaneLayout, PanePreview, SessionId, TmuxClient};
 mod support;
 use std::sync::Arc;
-use support::runner::FakeRunner;
+use support::{preview::with_text, runner::FakeRunner};
 
 #[test]
 fn pane_ids_cannot_be_names_or_command_text() {
@@ -129,10 +129,7 @@ async fn snapshot_parses_tmux_printable_control_character_separator() {
     assert_eq!(snapshot.sessions.len(), 1);
     assert_eq!(
         snapshot.preview.unwrap(),
-        [PanePreview {
-            layout: pane,
-            text: "ACTIVE OUTPUT".into()
-        }]
+        [with_text(pane, "ACTIVE OUTPUT")]
     );
 }
 #[tokio::test]
@@ -250,10 +247,7 @@ fn pane_line(pane: &PaneLayout, zoomed: bool, dock: &str) -> String {
     )
 }
 fn blank(layout: PaneLayout) -> PanePreview {
-    PanePreview {
-        layout,
-        text: String::new(),
-    }
+    with_text(layout, "")
 }
 #[tokio::test]
 async fn snapshot_lists_sessions_and_current_window_panes_in_one_invocation() {
@@ -316,15 +310,9 @@ async fn snapshot_captures_cached_panes_and_matches_text_by_pane_id() {
         .unwrap();
     let right_text: Vec<_> = (7..=30).map(|i| format!("r{i}")).collect();
     let expected = [
-        PanePreview {
-            layout: left,
-            text: "l28\nl29\nl30".into(),
-        },
+        with_text(left, "l28\nl29\nl30"),
         blank(new),
-        PanePreview {
-            layout: right,
-            text: right_text.join("\n"),
-        },
+        with_text(right, &right_text.join("\n")),
     ];
     assert_eq!(preview, expected);
     let calls = runner.calls.lock().unwrap();
@@ -364,27 +352,17 @@ async fn snapshot_keeps_panes_when_a_closed_cached_pane_aborts_the_captures() {
         .await
         .unwrap();
     assert_eq!(snapshot.sessions.len(), 1);
-    let expected = [
-        PanePreview {
-            layout: left,
-            text: "LEFT".into(),
-        },
-        blank(right),
-    ];
+    let expected = [with_text(left, "LEFT"), blank(right)];
     assert_eq!(snapshot.preview.unwrap(), expected);
 }
 #[tokio::test]
 async fn snapshot_keeps_cached_text_for_panes_whose_capture_did_not_run() {
     let left = layout("%1", 0, 0, 40, 24, true);
     let right = layout("%2", 1, 41, 39, 24, false);
-    let previous = |layout: &PaneLayout, text: &str| PanePreview {
-        layout: layout.clone(),
-        text: text.into(),
-    };
     let cache = [
-        previous(&left, "OLD LEFT"),
-        previous(&layout("%9", 1, 41, 39, 24, false), "GONE"),
-        previous(&right, "OLD RIGHT"),
+        with_text(left.clone(), "OLD LEFT"),
+        with_text(layout("%9", 1, 41, 39, 24, false), "GONE"),
+        with_text(right.clone(), "OLD RIGHT"),
     ];
     // 擷取到空白就是空白；%9 失敗後 %2 沒有擷取，沿用上一輪文字避免閃爍。
     let out = format!(
@@ -400,7 +378,7 @@ async fn snapshot_keeps_cached_text_for_panes_whose_capture_did_not_run() {
         .unwrap()
         .preview
         .unwrap();
-    assert_eq!(preview, [blank(left), previous(&right, "OLD RIGHT")]);
+    assert_eq!(preview, [blank(left), with_text(right, "OLD RIGHT")]);
 }
 #[tokio::test]
 async fn snapshot_rejects_extra_sections_instead_of_misattributing_pane_output() {

@@ -5,27 +5,17 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier},
 };
-use support::render::row_text;
+use support::{
+    preview::{layout as pane, with_text},
+    render::row_text,
+};
 use tmux_manager::{
-    tmux::{PaneId, PaneLayout, PanePreview},
+    tmux::{PaneLayout, PanePreview},
     ui::{
         preview::render_panes,
         preview_layout::{PaneSlot, PreviewLayout, compute},
     },
 };
-
-fn pane(index: u32, left: u16, top: u16, width: u16, height: u16, active: bool) -> PaneLayout {
-    PaneLayout {
-        id: PaneId::parse(&format!("%{index}")).unwrap(),
-        index,
-        left,
-        top,
-        width,
-        height,
-        active,
-        command: "zsh".into(),
-    }
-}
 
 fn slot(pane: usize, x: u16, y: u16, width: u16, height: u16) -> PaneSlot {
     PaneSlot {
@@ -230,13 +220,11 @@ fn random_layouts_are_covered_exactly_without_gaps_or_overlaps() {
 }
 
 fn preview(layout: PaneLayout, command: &str, text: &str) -> PanePreview {
-    PanePreview {
-        layout: PaneLayout {
-            command: command.into(),
-            ..layout
-        },
-        text: text.into(),
-    }
+    let layout = PaneLayout {
+        command: command.into(),
+        ..layout
+    };
+    with_text(layout, text)
 }
 
 fn draw(width: u16, height: u16, panes: &[PanePreview]) -> Terminal<TestBackend> {
